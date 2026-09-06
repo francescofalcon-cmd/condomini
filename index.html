@@ -69,6 +69,9 @@
   .fill-green { background: var(--green); }
   .fill-yellow { background: var(--yellow); }
   .fill-red { background: var(--red); }
+  .quota-input { width: 80px; padding: .3rem .4rem; border: 1px solid var(--border); border-radius: 5px; font-size: .8rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .quota-input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+  .inline-actions .btn-outline { padding: 2px 8px; font-size: .72rem; }
   @media (max-width: 768px) {
     header { padding: .75rem 1rem; }
     .container { padding: 1rem; }
@@ -126,6 +129,7 @@
         <option value="in_ritardo">In ritardo</option>
       </select>
       <input type="text" id="searchFamiglia" placeholder="Cerca famiglia..." oninput="renderFamiglie()">
+      <button class="btn-outline" onclick="openModal('famiglia')">+ Nuova Famiglia</button>
     </div>
     <table>
       <thead>
@@ -133,6 +137,7 @@
           <th>Palazzina</th>
           <th>Interno</th>
           <th>Famiglia</th>
+          <th>Quota Mensile</th>
           <th>Spesa Annua</th>
           <th>Rate Pagate / 12</th>
           <th>Importo Versato</th>
@@ -367,6 +372,10 @@ function renderFamiglie() {
         <td>${p.nome}</td>
         <td>${f.interno}</td>
         <td><strong>${f.nome}</strong></td>
+        <td>
+          <input class="quota-input" type="number" min="1" step="0.01" value="${f.quotaMensile}"
+                 onchange="aggiornaQuota('${p.id}','${f.id}',this.value)">
+        </td>
         <td class="amount">€ ${f.spesaAnnua.toLocaleString('it-IT')}</td>
         <td>${f.ratePagate} / 12</td>
         <td class="amount">€ ${f.versato.toLocaleString('it-IT')}</td>
@@ -375,7 +384,7 @@ function renderFamiglie() {
       </tr>`);
     }
   }
-  document.getElementById('famiglieBody').innerHTML = rows.join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem">Nessun risultato</td></tr>';
+  document.getElementById('famiglieBody').innerHTML = rows.join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:2rem">Nessun risultato</td></tr>';
 }
 
 function renderSpese() {
@@ -432,6 +441,18 @@ function openModal(type) {
         <button class="btn-cancel" onclick="closeModal()">Annulla</button>
         <button class="btn-save" onclick="salvaSpesa()">Salva</button>
       </div>`;
+  } else if (type === 'famiglia') {
+    let opts = palazzine.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+    modal.innerHTML = `
+      <h2>Nuova Famiglia</h2>
+      <div class="form-group"><label>Palazzina</label><select id="mFamPalazzina">${opts}</select></div>
+      <div class="form-group"><label>Interno</label><input type="text" id="mFamInterno" placeholder="Es. A5"></div>
+      <div class="form-group"><label>Nome Famiglia</label><input type="text" id="mFamNome" placeholder="Cognome"></div>
+      <div class="form-group"><label>Quota Mensile (€)</label><input type="number" id="mFamQuota" min="1" step="0.01"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">Annulla</button>
+        <button class="btn-save" onclick="salvaFamiglia()">Salva</button>
+      </div>`;
   }
   document.getElementById('modalOverlay').classList.add('open');
 }
@@ -449,6 +470,40 @@ function salvaSpesa() {
   if (!data || !imp) return alert('Compila tutti i campi');
   const nFam = palazzine[palId].famiglie.length;
   spese.push({ id: spese.length, data, palazzinaId: palId, categoria: cat, descrizione: desc, importo: imp, perFamiglia: +(imp / nFam).toFixed(2) });
+  closeModal();
+  renderAll();
+}
+
+function aggiornaQuota(palId, famId, val) {
+  const quota = Number(val);
+  if (!quota || quota < 0) { renderFamiglie(); return; }
+  const p = palazzine[palId];
+  const f = p.famiglie.find(x => x.id === famId);
+  if (!f) return;
+  f.quotaMensile = quota;
+  f.spesaAnnua = quota * 12;
+  f.versato = f.ratePagate * quota;
+  renderAll();
+}
+
+function salvaFamiglia() {
+  const palId = Number(document.getElementById('mFamPalazzina').value);
+  const interno = document.getElementById('mFamInterno').value.trim();
+  const nome = document.getElementById('mFamNome').value.trim();
+  const quota = Number(document.getElementById('mFamQuota').value);
+  if (!interno || !nome || !quota || quota < 0) return alert('Compila tutti i campi (quota maggiore di 0)');
+  const p = palazzine[palId];
+  if (p.famiglie.some(f => f.interno === interno)) return alert('Interno già esistente in questa palazzina');
+  const ratePagate = Math.floor(Math.random() * 4);
+  p.famiglie.push({
+    id: `${palId}-${p.famiglie.length}`,
+    interno,
+    nome,
+    quotaMensile: quota,
+    ratePagate,
+    versato: ratePagate * quota,
+    spesaAnnua: quota * 12
+  });
   closeModal();
   renderAll();
 }
