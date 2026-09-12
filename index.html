@@ -38,6 +38,18 @@
   .toolbar button.btn-outline:hover { background: var(--primary); color: #fff; }
   a.btn-gcal, .btn-gcal { display: inline-block; background: transparent; color: var(--primary); border: 1px solid var(--primary); border-radius: 6px; padding: .35rem .7rem; font-size: .8rem; text-decoration: none; cursor: pointer; }
   a.btn-gcal:hover { background: var(--primary); color: #fff; }
+  .cal-toolbar { display: flex; gap: 1rem; align-items: center; justify-content: center; margin-bottom: .8rem; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: .8rem; }
+  .cal-header { background: var(--primary); color: #fff; font-size: .72rem; font-weight: 600; padding: .4rem .2rem; text-align: center; }
+  .cal-giorno { background: var(--card); min-height: 42px; padding: .25rem .3rem; font-size: .78rem; cursor: default; position: relative; display: flex; flex-direction: column; align-items: center; }
+  .cal-giorno.vuoto { background: #f8f9fa; opacity: .5; }
+  .cal-giorno.oggi { background: #e8f0fe; font-weight: 700; }
+  .cal-giorno.selected { outline: 2px solid var(--primary); outline-offset: -2px; z-index: 1; }
+  .cal-giorno.app { background: #f3e8fd; cursor: pointer; }
+  .cal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); margin-top: 2px; }
+  .cal-dot.richiesto { background: var(--primary); }
+  .cal-dot.confermato { background: #b06000; }
+  .cal-dot.completato { background: var(--green); }
   .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border); }
   .tabs button { padding: .7rem 1.5rem; border: none; background: none; cursor: pointer; font-size: .9rem; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; font-weight: 500; }
   .tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
@@ -279,6 +291,14 @@
       <span>Appuntamenti telefonici richiesti dai condomini</span>
       <span class="who" id="appuntamentiCount"></span>
     </div>
+    <div class="cal-toolbar" id="calToolbar">
+      <button class="btn-outline" onclick="cambiaMese(-1)">&#9664;</button>
+      <strong id="calMeseTitolo"></strong>
+      <button class="btn-outline" onclick="cambiaMese(1)">&#9654;</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div id="calGiornoDetail"></div>
+    <h3 style="margin-top:1.5rem">Elenco appuntamenti</h3>
     <div id="appuntamentiList"></div>
   </div>
 
@@ -501,9 +521,87 @@ function descrizioneSpesa(cat) {
   return arr[Math.floor(rnd() * arr.length)];
 }
 
+let calAnno = null, calMese = null, calGiornoSelezionato = null;
+
+function cambiaMese(offset) {
+  const base = new Date(calAnno, calMese - 1, 1);
+  base.setMonth(base.getMonth() + offset);
+  calAnno = base.getFullYear();
+  calMese = base.getMonth() + 1;
+  renderCalendario();
+}
+
+function selezionaCalendario(data) {
+  calGiornoSelezionato = data;
+  renderCalendario();
+}
+
+function renderCalendario() {
+  const today = new Date();
+  if (calAnno === null || calMese === null) {
+    calAnno = today.getFullYear();
+    calMese = today.getMonth() + 1;
+  }
+  const elTitolo = document.getElementById('calMeseTitolo');
+  const elGrid = document.getElementById('calGrid');
+  const elDetail = document.getElementById('calGiornoDetail');
+  if (!elTitolo || !elGrid || !elDetail) return;
+
+  const nomiMesi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const nomiGiorni = ['Lu','Ma','Me','Gio','Ve','Sa','Do'];
+  const oggiIso = iso(today);
+
+  elTitolo.textContent = nomiMesi[calMese - 1] + ' ' + calAnno;
+
+  const primo = new Date(calAnno, calMese - 1, 1);
+  const giorniNelMese = new Date(calAnno, calMese, 0).getDate();
+  // indice but separatamente: lunedi=0 => Domenica=6
+  const giornoPrimo = (primo.getDay() + 6) % 7;
+
+  let html = nomiGiorni.map(g => `<div class="cal-header">${g}</div>`).join('');
+  for (let i = 0; i < giornoPrimo; i++) html += '<div class="cal-giorno vuoto"></div>';
+  for (let d = 1; d <= giorniNelMese; d++) {
+    const data = calAnno + '-' + String(calMese).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    const appGiorno = appuntamenti.filter(a => a.data === data);
+    const stato = appGiorno.length ? (appGiorno.some(a => a.stato === 'completato') ? 'completato' : appGiorno.some(a => a.stato === 'confermato') ? 'confermato' : 'richiesto') : null;
+    const cls = ['cal-giorno'];
+    if (data === oggiIso) cls.push('oggi');
+    if (data === calGiornoSelezionato) cls.push('selected');
+    if (appGiorno.length) cls.push('app');
+    html += `<div class="${cls.join(' ')}" onclick="selezionaCalendario('${data}')">${d}`;
+    if (stato) html += '<div class="cal-dot ' + stato + '"></div>';
+    html += '</div>';
+  }
+  const resto = (7 - ((giornoPrimo + giorniNelMese) % 7)) % 7;
+  for (let i = 0; i < resto; i++) html += '<div class="cal-giorno vuoto"></div>';
+  elGrid.innerHTML = html;
+
+  if (calGiornoSelezionato) {
+    const sel = appuntamenti.filter(a => a.data === calGiornoSelezionato).sort((a, b) => a.ora.localeCompare(b.ora));
+    if (sel.length) {
+      elDetail.innerHTML = '<h4>Appuntamenti del ' + formatDate(calGiornoSelezionato) + '</h4>' + sel.map(a => `
+        <div class="appunte-card">
+          <div class="appunte-head"><strong>&#128197; ${a.ora}</strong><span class="badge badge-${a.stato}">${a.stato}</span></div>
+          <div class="appunte-body"><div>${a.nome} — ${a.palazzina} (interno ${a.interno})</div><div class="muted">Telefono: ${a.telefono || 'non fornito'}</div></div>
+          <div class="appunte-actions">
+            ${a.stato === 'richiesto' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'confermato\')">&#10003; Conferma</button>' : ''}
+            ${a.stato !== 'completato' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'completato\')">&#9989; Completa</button>' : ''}
+            <a class="btn-gcal" target="_blank" rel="noopener" href="${urlGoogleCalendar(a)}">&#128197; Aggiungi a Google</a>
+            <button class="btn-outline" onclick="eliminaAppuntamento(' + a.id + ')">&#128465; Elimina</button>
+          </div>
+        </div>`).join('');
+    } else {
+      elDetail.innerHTML = '<h4>Appuntamenti del ' + formatDate(calGiornoSelezionato) + '</h4><div class="empty">Nessun appuntamento in questo giorno.</div>';
+    }
+  } else {
+    elDetail.innerHTML = '';
+  }
+}
+
 function renderAppuntamenti() {
   const list = document.getElementById('appuntamentiList');
   if (!list) return;
+  renderCalendario();
   const el = document.getElementById('appuntamentiCount');
   if (el) el.textContent = appuntamenti.length ? appuntamenti.length + (appuntamenti.length === 1 ? ' appuntamento' : ' appuntamenti') + '. La chatbox accetta: "vorrei un appuntamento", "prenota una chiamata".' : 'Nessun appuntamento ancora. La chatbox accetta: "vorrei un appuntamento", "prenota una chiamata".';
   if (!appuntamenti.length) { list.innerHTML = '<div class="empty">Nessun appuntamento richiesto.</div>'; return; }
