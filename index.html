@@ -203,6 +203,7 @@
       </select>
       <input type="text" id="searchFamiglia" placeholder="Cerca famiglia..." oninput="renderFamiglie()">
       <button class="btn-outline" onclick="openModal('famiglia')">+ Nuova Famiglia</button>
+      <button class="btn-outline" onclick="scaricaExcelPassword()">&#11015; Scarica Elenco (Excel)</button>
     </div>
     <table>
       <thead>
@@ -1116,6 +1117,25 @@ function renderCondomino() {
     <td colspan="4">Totale a mio carico</td>
     <td class="amount">${euro(totSpeseCorr)}</td>
   </tr>`);
+}
+
+function scaricaExcelPassword() {
+  let righe = 'Palazzina;Interno;Nome e Cognome;Cognome;Password\r\n';
+  for (const p of palazzine) {
+    for (const f of p.famiglie) {
+      const cognome = f.nome.split(' ').pop();
+      righe += `${p.nome};${f.interno};${f.nome};${cognome};${f.password}\r\n`;
+    }
+  }
+  const blob = new Blob(['\ufeff' + righe], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cognomi_password.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 initVoice();
