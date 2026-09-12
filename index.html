@@ -36,6 +36,8 @@
   .toolbar button:hover { background: var(--primary-dark); }
   .toolbar button.btn-outline { background: transparent; color: var(--primary); border: 1px solid var(--primary); }
   .toolbar button.btn-outline:hover { background: var(--primary); color: #fff; }
+  a.btn-gcal, .btn-gcal { display: inline-block; background: transparent; color: var(--primary); border: 1px solid var(--primary); border-radius: 6px; padding: .35rem .7rem; font-size: .8rem; text-decoration: none; cursor: pointer; }
+  a.btn-gcal:hover { background: var(--primary); color: #fff; }
   .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border); }
   .tabs button { padding: .7rem 1.5rem; border: none; background: none; cursor: pointer; font-size: .9rem; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; font-weight: 500; }
   .tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
@@ -519,6 +521,7 @@ function renderAppuntamenti() {
       <div class="appunte-actions">
         ${a.stato === 'richiesto' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'confermato\')">&#10003; Conferma</button>' : ''}
         ${a.stato !== 'completato' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'completato\')">&#9989; Completa</button>' : ''}
+        <a class="btn-gcal" target="_blank" rel="noopener" href="${urlGoogleCalendar(a)}">&#128197; Aggiungi a Google</a>
         <button class="btn-outline" onclick="eliminaAppuntamento(' + a.id + ')">&#128465; Elimina</button>
       </div>
       <div class="appunte-foot">Richiesto il ${formatDate(a.creato.slice(0, 10))} alle ${a.creato.slice(11, 16)}</div>
@@ -534,6 +537,20 @@ function eliminaAppuntamento(id) {
   appuntamenti = appuntamenti.filter(x => x.id !== id);
   salvaAppuntamenti();
   renderAppuntamenti();
+}
+
+function urlGoogleCalendar(a, durataMinuti) {
+  durataMinuti = durataMinuti || 30;
+  const inizio = new Date(a.data + 'T' + a.ora + ':00');
+  const fine = new Date(inizio.getTime() + durataMinuti * 60000);
+  const fmt = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + 'T' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '00';
+  const p = new URLSearchParams();
+  p.set('action', 'TEMPLATE');
+  p.set('text', 'Appuntamento telefonico - ' + a.nome + ' (' + a.palazzina + ', interno ' + a.interno + ')');
+  p.set('dates', fmt(inizio) + '/' + fmt(fine));
+  p.set('details', 'Appuntamento telefonico richiesto dal condomino ' + a.nome + ' (' + a.palazzina + ', interno ' + a.interno + '). Stato: ' + a.stato + '.');
+  p.set('location', 'Telefonata');
+  return 'https://calendar.google.com/calendar/render?' + p.toString();
 }
 
 function salvaAppuntamenti() {
@@ -926,53 +943,79 @@ function descriviCondomino(p, f) {
   return t;
 }
 
+function slotLiberi(limit) {
+  const giàPresi = appuntamenti.filter(a => a.stato !== 'completato').map(a => a.data + ' ' + a.ora);
+  const liberi = [];
+  const ore = [9, 10, 11, 14, 15, 16];
+  const oggi = new Date();
+  for (let d = 1; d <= 14 && liberi.length < (limit || 5); d++) {
+    const data = new Date(oggi);
+    data.setDate(data.getDate() + d);
+    const giorno = data.getDay();
+    if (giorno === 0 || giorno === 6) continue;
+    for (const h of ore) {
+      const slot = iso(data) + ' ' + String(h).padStart(2, '0') + ':00';
+      if (giàPresi.includes(slot)) continue;
+      liberi.push({ data: iso(data), ora: String(h).padStart(2, '0') + ':00' });
+      if (liberi.length >= (limit || 5)) break;
+    }
+  }
+  return liberi;
+}
+
+function descriviSlot(slot) {
+  const giorni = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+  const d = new Date(slot.data + 'T00:00:00');
+  return giorni[d.getDay()] + ' ' + formatDate(slot.data) + ' alle ' + slot.ora;
+}
+
 function rispondiAppuntamento(lq, p, f) {
   const intento = /(appuntamento|prenot|fissa|fissare|calendarizz|chiamata con|parlare con l|vedere l'amm|chiamata telefonica|richiama|contatt|telefonat)/.test(lq);
   const annulla = /(annull|lasci|niente)/.test(lq);
+  const conferma = /(va bene|ok|perfetto|sì|si|scelgo|d'accordo|va benissimo|preferisco)/.test(lq);
   if (prenotazioneInCorso) {
     if (annulla) { prenotazioneInCorso = null; return 'Va bene, ho annullato. Vuoi sapere altro sulle tue spese?'; }
+    if (conferma && !parsaOra(lq)) {
+      const slot = slotLiberi(1)[0];
+      if (slot) {
+        return prenota(p, f, slot.data, slot.ora) + ' Se preferisci un altro giorno o ora, dimmelo: ad esempio "lunedì alle 10".';
+      }
+    }
     const ora = parsaOra(lq);
     if (ora) {
       const data = parsaData(lq);
-      appuntamenti.push({
-        id: Date.now(),
-        data,
-        ora,
-        nome: f.nome,
-        palazzina: p.nome,
-        interno: f.interno,
-        telefono: '',
-        stato: 'richiesto',
-        creato: new Date().toISOString()
-      });
-      salvaAppuntamenti();
-      prenotazioneInCorso = null;
-      renderAppuntamenti();
-      return 'Perfetto ' + f.nome.split(' ')[0] + '! Ho prenotato il tuo appuntamento telefonico per il ' + formatDate(data) + ' alle ' + ora + '. L\'amministratore ti richiamerà. Vuoi sapere altro?';
+      return prenota(p, f, data, ora) + '';
     }
-    return 'Non ho capito bene. Dimmi il giorno e l\'ora, per esempio: "domani alle 15" oppure "lunedì alle 10".';
+    const liberi = slotLiberi(5);
+    return 'Non ho capito il giorno. Ti mostro i prossimi slot liberi: ' + liberi.map(descriviSlot).join('; ') + '. Dimmi quale preferisci, oppure un giorno e un\'ora, ad esempio "lunedì alle 10".';
   }
   if (!intento) return null;
   const ora = parsaOra(lq);
   if (ora) {
     const data = parsaData(lq);
-    appuntamenti.push({
-      id: Date.now(),
-      data,
-      ora,
-      nome: f.nome,
-      palazzina: p.nome,
-      interno: f.interno,
-      telefono: '',
-      stato: 'richiesto',
-      creato: new Date().toISOString()
-    });
-    salvaAppuntamenti();
-    renderAppuntamenti();
-    return 'Perfetto ' + f.nome.split(' ')[0] + '! Ho prenotato il tuo appuntamento telefonico per il ' + formatDate(data) + ' alle ' + ora + '. L\'amministratore ti richiamerà. Vuoi sapere altro?';
+    return prenota(p, f, data, ora);
   }
+  const liberi = slotLiberi(5);
   prenotazioneInCorso = { p, f };
-  return 'Volentieri! Mi dici per quando preferisci? Dimmi il giorno e l\'ora, per esempio: "domani alle 15" oppure "giovedì alle 10".';
+  return 'Volentieri! Questi sono i prossimi slot liberi: ' + liberi.map(descriviSlot).join('; ') + '. Dimmi quale preferisci, oppure un giorno e un\'ora, ad esempio "lunedì alle 10".';
+}
+
+function prenota(p, f, data, ora) {
+  appuntamenti.push({
+    id: Date.now(),
+    data,
+    ora,
+    nome: f.nome,
+    palazzina: p.nome,
+    interno: f.interno,
+    telefono: '',
+    stato: 'richiesto',
+    creato: new Date().toISOString()
+  });
+  salvaAppuntamenti();
+  prenotazioneInCorso = null;
+  renderAppuntamenti();
+  return 'Perfetto ' + f.nome.split(' ')[0] + '! Ho prenotato il tuo appuntamento telefonico per il ' + formatDate(data) + ' alle ' + ora + '. L\'amministratore ti richiamerà. Vuoi sapere altro?';
 }
 
 function parsaOra(txt) {
@@ -1065,9 +1108,6 @@ function rispondiCondomino(lq) {
 function generaRisposta(q) {
   const lq = (q || '').toLowerCase();
 
-  const risposteReg = rispondiRegolamento(lq);
-  if (risposteReg) return risposteReg;
-
   if (utenteCorrente && utenteCorrente.tipo === 'condomino') return rispondiCondomino(lq);
 
   if (/(appuntament|richiest.*chiamat|prenotaz)/.test(lq)) {
@@ -1079,6 +1119,9 @@ function generaRisposta(q) {
     t += ' Il prossimo è il ' + formatDate(prox.data) + ' alle ' + prox.ora + ' con ' + prox.nome + ' (' + prox.palazzina + ', interno ' + prox.interno + ').';
     return t;
   }
+
+  const risposteReg = rispondiRegolamento(lq);
+  if (risposteReg) return risposteReg;
 
   const totFam = palazzine.reduce((s, p) => s + p.famiglie.length, 0);
   const totSpesa = spese.reduce((s, sp) => s + sp.importo, 0);
