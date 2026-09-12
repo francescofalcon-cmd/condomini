@@ -1083,7 +1083,7 @@ function accediCondomino() {
   } else {
     f = famiglie[0];
   }
-  if (pw !== f.password) { err.textContent = 'Password errata.'; return; }
+  if (pw !== f.password) { err.textContent = 'Password errata per ' + f.nome + '.'; return; }
   err.textContent = '';
   document.getElementById('loginSceltaFamigliaWrap').style.display = 'none';
   utenteCorrente = { tipo: 'condomino', p: palazzine[palId], f };
