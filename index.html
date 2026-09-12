@@ -135,16 +135,16 @@
 
     <div class="login-form" id="loginFormCond">
       <div class="form-group">
-        <label>Palazzina</label>
+        <label>Indirizzo palazzina</label>
         <select id="loginPalazzina" onchange="popolaInterni()"></select>
-      </div>
-      <div class="form-group">
-        <label>Interno</label>
-        <select id="loginInterno"></select>
       </div>
       <div class="form-group">
         <label>Cognome</label>
         <input type="text" id="loginNome" placeholder="Il tuo cognome (es. Rossi)">
+      </div>
+      <div class="form-group">
+        <label>Password personale</label>
+        <input type="password" id="loginPasswordCond" placeholder="Password fornita dall'amministratore">
       </div>
       <button class="btn-login" onclick="accediCondomino()">Entra come condomino</button>
       <div class="login-error" id="loginErrorCond"></div>
@@ -159,7 +159,7 @@
       <div class="login-error" id="loginErrorAdmin"></div>
     </div>
 
-    <div class="login-hint">I dati sono generati a scopo dimostrativo. Il codice personale è: palazzina + interno + cognome.</div>
+    <div class="login-hint">Dati dimostrativi. Per il condomino serve la password fornita dall'amministratore. Amministratore: password admin2026.</div>
   </div>
 </div>
 
@@ -210,6 +210,7 @@
           <th>Palazzina</th>
           <th>Interno</th>
           <th>Famiglia</th>
+          <th>Password</th>
           <th>Quota Mensile</th>
           <th>Spesa Annua</th>
           <th>Rate Pagate / 12</th>
@@ -319,6 +320,7 @@ function init() {
           id: `${i}-${famiglie.length}`,
           interno: `${scala}${f + 1}`,
           nome: generaNome(),
+          password: String(1000 + Math.floor(Math.random() * 9000)),
           quotaMensile,
           ratePagate,
           versato: ratePagate * quotaMensile,
@@ -491,6 +493,7 @@ function renderFamiglie() {
         <td>${p.nome}</td>
         <td>${f.interno}</td>
         <td><strong>${f.nome}</strong></td>
+        <td><code style="font-size:.8rem;letter-spacing:1px">${f.password}</code></td>
         <td>
           <input class="quota-input" type="number" min="1" step="0.01" value="${f.quotaMensile}"
                  onchange="aggiornaQuota('${p.id}','${f.id}',this.value)">
@@ -508,7 +511,7 @@ function renderFamiglie() {
       </tr>`);
     }
   }
-  document.getElementById('famiglieBody').innerHTML = rows.join('') || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:2rem">Nessun risultato</td></tr>';
+  document.getElementById('famiglieBody').innerHTML = rows.join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:2rem">Nessun risultato</td></tr>';
 }
 
 function renderSpese() {
@@ -1004,23 +1007,21 @@ function loginTab(tipo) {
 
 function popolaInterni() {
   const palId = Number(document.getElementById('loginPalazzina').value);
-  const sel = document.getElementById('loginInterno');
-  sel.innerHTML = palazzine[palId].famiglie.map(f => `<option value="${f.id}">${f.interno}</option>`).join('');
+  return palazzine[palId].famiglie;
 }
 
 function accediCondomino() {
   const palId = Number(document.getElementById('loginPalazzina').value);
-  const famId = document.getElementById('loginInterno').value;
   const nome = document.getElementById('loginNome').value.trim().toLowerCase();
-  const f = palazzine[palId].famiglie.find(x => x.id === famId);
+  const pw = document.getElementById('loginPasswordCond').value.trim();
   const err = document.getElementById('loginErrorCond');
   if (!nome) { err.textContent = 'Inserisci il tuo cognome.'; return; }
-  if (!f) { err.textContent = 'Dati non validi.'; return; }
-  const cognome = f.nome.split(' ').pop().toLowerCase();
-  if (cognome !== nome) {
-    err.textContent = 'Il cognome non coincide con ' + f.nome + ' dell\'interno ' + f.interno + '.';
-    return;
-  }
+  if (!pw) { err.textContent = 'Inserisci la password personale.'; return; }
+  const famiglie = palazzine[palId].famiglie.filter(x => x.nome.split(' ').pop().toLowerCase() === nome);
+  if (!famiglie.length) { err.textContent = 'Nessun condomino con questo cognome in questa palazzina.'; return; }
+  if (famiglie.length > 1) { err.textContent = 'Ci sono più famiglie con questo cognome. Contatta l\'amministratore.'; return; }
+  const f = famiglie[0];
+  if (pw !== f.password) { err.textContent = 'Password errata.'; return; }
   err.textContent = '';
   utenteCorrente = { tipo: 'condomino', p: palazzine[palId], f };
   mostraApp();
@@ -1039,6 +1040,7 @@ function logout() {
   utenteCorrente = null;
   document.getElementById('loginNome').value = '';
   document.getElementById('loginPassword').value = '';
+  document.getElementById('loginPasswordCond').value = '';
   document.getElementById('loginErrorCond').textContent = '';
   document.getElementById('loginErrorAdmin').textContent = '';
   document.getElementById('loginOverlay').style.display = 'flex';
@@ -1065,7 +1067,7 @@ function mostraApp() {
 
 function renderCondomino() {
   const { p, f } = utenteCorrente;
-  document.getElementById('condominoNome').textContent = p.nome + ' · interno ' + f.interno + ' · ' + f.nome;
+  document.getElementById('condominoNome').textContent = p.nome + ' · interno ' + f.interno + ' · ' + f.nome + ' · pw ' + f.password;
   const residuo = f.spesaAnnua - f.versato;
   const st = statoCondomino(f);
   const badgeClass = st === 'aggiornato' ? 'badge-ok' : st === 'in_attesa' ? 'badge-pending' : 'badge-overdue';
