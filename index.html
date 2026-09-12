@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Gestione Spese Condominiali</title>
 <style>
   :root {
@@ -46,6 +49,16 @@
   .badge-ok { background: #e6f4ea; color: var(--green); }
   .badge-pending { background: #fef7e0; color: #b06000; }
   .badge-overdue { background: #fce8e6; color: var(--red); }
+  .badge-richiesto { background: #e8f0fe; color: var(--primary); }
+  .badge-confermato { background: #fef7e0; color: #b06000; }
+  .badge-completato { background: #e6f4ea; color: var(--green); }
+  .muted { color: var(--text-muted); font-size: .85rem; }
+  .appunte-card { background: var(--card); border-radius: 8px; padding: .9rem 1rem; box-shadow: var(--shadow); margin-bottom: .8rem; }
+  .appunte-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .appunte-body { margin-top: .4rem; }
+  .appunte-actions { margin-top: .6rem; display: flex; gap: .4rem; flex-wrap: wrap; }
+  .appunte-foot { margin-top: .5rem; font-size: .72rem; color: var(--text-muted); }
+  .empty { color: var(--text-muted); padding: 1rem 0; }
   .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
   .amount.negative { color: var(--red); }
   .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
@@ -174,6 +187,7 @@
     <button class="active" onclick="showTab('riepilogo')">Riepilogo Palazzine</button>
     <button onclick="showTab('dettaglio')">Dettaglio Famiglie</button>
     <button onclick="showTab('spese')">Elenco Spese</button>
+    <button onclick="showTab('appuntamenti')">&#128197; Appuntamenti</button>
   </div>
 
   <!-- TAB: RIEPILOGO -->
@@ -255,6 +269,15 @@
       </thead>
       <tbody id="speseBody"></tbody>
     </table>
+  </div>
+
+  <!-- PANEL: APPUNTAMENTI -->
+  <div class="panel" id="panel-appuntamenti">
+    <div class="toolbar">
+      <span>Appuntamenti telefonici richiesti dai condomini</span>
+      <span class="who" id="appuntamentiCount"></span>
+    </div>
+    <div id="appuntamentiList"></div>
   </div>
 
   <!-- PANEL: AREA CONDOMINO -->
@@ -345,8 +368,12 @@ const REGOLAMENTO = [
 ];
 
 let palazzine = [];
+const APP_VERSION = 'v4-dati-fissi';
 let spese = [];
 const DATA_KEY = 'condomini_dati_v2';
+let appuntamenti = [];
+const APP_KEY = 'condomini_appuntamenti_v1';
+let prenotazioneInCorso = null;
 
 /* Generatore pseudo-casuale deterministico: stessi dati su ogni dispositivo */
 let rndState = 20260912;
@@ -356,6 +383,7 @@ function rnd() {
 }
 
 function init() {
+  appuntamenti = JSON.parse(localStorage.getItem(APP_KEY) || '[]');
   const salvato = localStorage.getItem(DATA_KEY);
   if (salvato) {
     try {
@@ -471,11 +499,52 @@ function descrizioneSpesa(cat) {
   return arr[Math.floor(rnd() * arr.length)];
 }
 
+function renderAppuntamenti() {
+  const list = document.getElementById('appuntamentiList');
+  if (!list) return;
+  const el = document.getElementById('appuntamentiCount');
+  if (el) el.textContent = appuntamenti.length ? appuntamenti.length + (appuntamenti.length === 1 ? ' appuntamento' : ' appuntamenti') + '. La chatbox accetta: "vorrei un appuntamento", "prenota una chiamata".' : 'Nessun appuntamento ancora. La chatbox accetta: "vorrei un appuntamento", "prenota una chiamata".';
+  if (!appuntamenti.length) { list.innerHTML = '<div class="empty">Nessun appuntamento richiesto.</div>'; return; }
+  const ordinate = [...appuntamenti].sort((a, b) => (a.data + a.ora).localeCompare(b.data + b.ora));
+  list.innerHTML = ordinate.map(a => `
+    <div class="appunte-card">
+      <div class="appunte-head">
+        <strong>&#128197; ${formatDate(a.data)} · ${a.ora}</strong>
+        <span class="badge badge-${a.stato}">${a.stato}</span>
+      </div>
+      <div class="appunte-body">
+        <div>${a.nome} — ${a.palazzina} (interno ${a.interno})</div>
+        <div class="muted">Telefono: ${a.telefono || 'non fornito'}</div>
+      </div>
+      <div class="appunte-actions">
+        ${a.stato === 'richiesto' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'confermato\')">&#10003; Conferma</button>' : ''}
+        ${a.stato !== 'completato' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'completato\')">&#9989; Completa</button>' : ''}
+        <button class="btn-outline" onclick="eliminaAppuntamento(' + a.id + ')">&#128465; Elimina</button>
+      </div>
+      <div class="appunte-foot">Richiesto il ${formatDate(a.creato.slice(0, 10))} alle ${a.creato.slice(11, 16)}</div>
+    </div>`).join('');
+}
+
+function completaAppuntamento(id, stato) {
+  const a = appuntamenti.find(x => x.id === id);
+  if (a) { a.stato = stato; salvaAppuntamenti(); renderAppuntamenti(); }
+}
+
+function eliminaAppuntamento(id) {
+  appuntamenti = appuntamenti.filter(x => x.id !== id);
+  salvaAppuntamenti();
+  renderAppuntamenti();
+}
+
+function salvaAppuntamenti() {
+  localStorage.setItem(APP_KEY, JSON.stringify(appuntamenti));
+}
+
 function renderAll() {
-  renderSummary();
   renderRiepilogo();
   renderFamiglie();
   renderSpese();
+  renderAppuntamenti();
   renderHeader();
 }
 
@@ -857,13 +926,109 @@ function descriviCondomino(p, f) {
   return t;
 }
 
+function rispondiAppuntamento(lq, p, f) {
+  const intento = /(appuntamento|prenot|fissa|fissare|calendarizz|chiamata con|parlare con l|vedere l'amm|chiamata telefonica|richiama|contatt|telefonat)/.test(lq);
+  const annulla = /(annull|lasci|niente)/.test(lq);
+  if (prenotazioneInCorso) {
+    if (annulla) { prenotazioneInCorso = null; return 'Va bene, ho annullato. Vuoi sapere altro sulle tue spese?'; }
+    const ora = parsaOra(lq);
+    if (ora) {
+      const data = parsaData(lq);
+      appuntamenti.push({
+        id: Date.now(),
+        data,
+        ora,
+        nome: f.nome,
+        palazzina: p.nome,
+        interno: f.interno,
+        telefono: '',
+        stato: 'richiesto',
+        creato: new Date().toISOString()
+      });
+      salvaAppuntamenti();
+      prenotazioneInCorso = null;
+      renderAppuntamenti();
+      return 'Perfetto ' + f.nome.split(' ')[0] + '! Ho prenotato il tuo appuntamento telefonico per il ' + formatDate(data) + ' alle ' + ora + '. L\'amministratore ti richiamerà. Vuoi sapere altro?';
+    }
+    return 'Non ho capito bene. Dimmi il giorno e l\'ora, per esempio: "domani alle 15" oppure "lunedì alle 10".';
+  }
+  if (!intento) return null;
+  const ora = parsaOra(lq);
+  if (ora) {
+    const data = parsaData(lq);
+    appuntamenti.push({
+      id: Date.now(),
+      data,
+      ora,
+      nome: f.nome,
+      palazzina: p.nome,
+      interno: f.interno,
+      telefono: '',
+      stato: 'richiesto',
+      creato: new Date().toISOString()
+    });
+    salvaAppuntamenti();
+    renderAppuntamenti();
+    return 'Perfetto ' + f.nome.split(' ')[0] + '! Ho prenotato il tuo appuntamento telefonico per il ' + formatDate(data) + ' alle ' + ora + '. L\'amministratore ti richiamerà. Vuoi sapere altro?';
+  }
+  prenotazioneInCorso = { p, f };
+  return 'Volentieri! Mi dici per quando preferisci? Dimmi il giorno e l\'ora, per esempio: "domani alle 15" oppure "giovedì alle 10".';
+}
+
+function parsaOra(txt) {
+  const paroleNum = { mezzogiorno: 12, una: 13, due: 14, tre: 15, quattro: 16, cinque: 17, sei: 10, sette: 10, otto: 9, nove: 9, dieci: 10, undici: 11, dodici: 12, tredici: 13, quattordici: 14, quindici: 15, sedici: 16, diciassette: 17 };
+  const lq = (txt || '').toLowerCase();
+  let ora = null;
+  const m = lq.match(/\b(\d{1,2})(?::(\d{2}))?\b/);
+  if (m) {
+    ora = String(m[1]).padStart(2, '0') + (m[2] ? ':' + m[2] : ':00');
+  } else {
+    const nv = normalizza(lq);
+    for (const kv of nv) {
+      if (paroleNum[kv] !== undefined) { ora = String(paroleNum[kv]).padStart(2, '0') + ':00'; break; }
+    }
+  }
+  return ora;
+}
+
+function parsaData(txt) {
+  const lq = (txt || '').toLowerCase();
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  if (/(dopdomani|fra due giorni)/.test(lq)) {
+    const d = new Date(now); d.setDate(d.getDate() + 2); return iso(d);
+  }
+  if (/(domani|domani mattina|domani pomeriggio)/.test(lq)) {
+    const d = new Date(now); d.setDate(d.getDate() + 1); return iso(d);
+  }
+  if (/(oggi|stasera|questo pomeriggio)/.test(lq)) return iso(now);
+  const giorni = { domenica: 0, lunedi: 1, martedi: 2, mercoledi: 3, giovedi: 4, venerdi: 5, sabato: 6 };
+  const nv = normalizza(lq).join(' ');
+  for (const g of Object.keys(giorni)) {
+    if (nv.includes(g)) {
+      const target = giorni[g];
+      let diff = (target - now.getDay() + 7) % 7;
+      if (diff === 0) diff = 7;
+      const d = new Date(now); d.setDate(d.getDate() + diff); return iso(d);
+    }
+  }
+  return iso(new Date(now.getTime() + 86400000));
+}
+
+function iso(d) {
+  return d.toISOString().slice(0, 10);
+}
+
 function rispondiCondomino(lq) {
   const { p, f } = utenteCorrente;
   if (/(ciao|salve|buongiorno|hey|ehi)/.test(lq)) {
     let t = 'Ciao ' + f.nome.split(' ')[0] + '! Posso dirti le tue spese, il tuo residuo o le tue quote. I dati degli altri condomini non li vedo, vedo solo i tuoi.';
     t += ' Se mi chiedi qualcosa sul regolamento condominiale, ad esempio "è vietato fare rumore dopo le 23?", ti rispondo.';
+    t += ' Posso anche fissare un appuntamento telefonico con l\'amministratore: chiedimi "vorrei un appuntamento".';
     return t;
   }
+  const rispostaApp = rispondiAppuntamento(lq, p, f);
+  if (rispostaApp) return rispostaApp;
   const regRicevuto = rispondiRegolamento(lq);
   if (regRicevuto) return regRicevuto;
   if (/((quota|mensil|rata|canone))/.test(lq)) {
@@ -892,9 +1057,9 @@ function rispondiCondomino(lq) {
     return cat + ': hai ' + correlate.length + ' spese a tuo carico per un totale di ' + euro(tot) + '.';
   }
   if (/(aiuto|cosa.*(puoi|so) fare|help|comando)/.test(lq)) {
-    return 'Posso dirti la tua quota mensile, quanto hai versato, il tuo residuo, le tue spese per categoria e la tua situazione. Chiedimi ad esempio: "quanto è il mio residuo?" oppure "quanto ho versato?".';
+    return 'Posso dirti la tua quota mensile, quanto hai versato, il tuo residuo, le tue spese per categoria e la tua situazione. Posso anche fissare un appuntamento telefonico con l\'amministratore chiedendomi "vorrei un appuntamento". Chiedimi ad esempio: "quanto è il mio residuo?" oppure "quanto ho versato?".';
   }
-  return 'Vedo solo le tue spese. Chiedimi: "quanto è il mio residuo?", "quale è la mia quota?", "quanto ho versato?" o "quante spese ho?".';
+  return 'Vedo solo le tue spese. Chiedimi: "quanto è il mio residuo?", "quale è la mia quota?", "quanto ho versato?", "quante spese ho?" oppure "vorrei un appuntamento telefonico".';
 }
 
 function generaRisposta(q) {
@@ -904,6 +1069,16 @@ function generaRisposta(q) {
   if (risposteReg) return risposteReg;
 
   if (utenteCorrente && utenteCorrente.tipo === 'condomino') return rispondiCondomino(lq);
+
+  if (/(appuntament|richiest.*chiamat|prenotaz)/.test(lq)) {
+    if (!appuntamenti.length) return 'Non ci sono ancora appuntamenti richiesti. I condomini possono prenotarli tramite la chatbox: "vorrei un appuntamento".';
+    const ordinati = [...appuntamenti].sort((a, b) => (a.data + a.ora).localeCompare(b.data + b.ora));
+    const inAttesa = ordinati.filter(a => a.stato === 'richiesto').length;
+    const prox = ordinati[0];
+    let t = 'Ci sono ' + appuntamenti.length + ' appuntamenti, di cui ' + inAttesa + ' da confermare.';
+    t += ' Il prossimo è il ' + formatDate(prox.data) + ' alle ' + prox.ora + ' con ' + prox.nome + ' (' + prox.palazzina + ', interno ' + prox.interno + ').';
+    return t;
+  }
 
   const totFam = palazzine.reduce((s, p) => s + p.famiglie.length, 0);
   const totSpesa = spese.reduce((s, sp) => s + sp.importo, 0);
