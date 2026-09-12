@@ -618,18 +618,29 @@ function rispondi(q) {
 
 function euro(n) { return '€ ' + Number(n).toLocaleString('it-IT'); }
 
+function normalizza(txt) {
+  return (txt || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/).filter(Boolean);
+}
+
 function trovaCondomini(lq) {
   const trovati = [];
-  const parole = lq.split(/\s+/);
+  const parole = normalizza(lq);
+  const ambigue = ['costa','conti','gallo','bruno','bianchi','greco','marino','fontana','rossi','ricci','roma','sara','luca'];
+  const contesto = ['famiglia','signor','signora','condomin','pagat','deve','abita','residuo','quota','nome','situazione','versato','intern','cognom','parli','chiama','chi'];
+  const haContesto = parole.some(w => contesto.some(c => w.includes(c) || c.includes(w)));
   for (const p of palazzine) {
     for (const f of p.famiglie) {
-      const parti = f.nome.toLowerCase().split(' ');
-      const nome = parti[0];
-      const cognome = parti[parti.length - 1];
+      const tok = normalizza(f.nome);
       const match = parole.some(w =>
-        w === nome || w === cognome || (w.length > 3 && (nome.startsWith(w) || cognome.startsWith(w)))
+        tok.some(t => t === w || (w.length > 3 && (t.startsWith(w) || w.startsWith(t))))
       );
-      if (match) trovati.push({ p, f });
+      if (!match) continue;
+      const parolaTrovata = parole.find(w => tok.some(t => t === w || (w.length > 3 && (t.startsWith(w) || w.startsWith(t)))));
+      if (ambigue.includes(parolaTrovata) && !haContesto) continue;
+      trovati.push({ p, f });
     }
   }
   return trovati;
@@ -668,10 +679,14 @@ function generaRisposta(q) {
   if (/(ciao|salve|buongiorno|hey|ehi)/.test(lq)) return 'Ciao! Chiedimi pure informazioni sulle spese condominiali, sul saldo o sulle famiglie.';
 
   const condomini = trovaCondomini(lq);
-  if (condomini.length) {
-    if (/(quali.*condomini|elenco|lista|tutti)/.test(lq)) {
-      return 'Ci sono ' + totFam + ' famiglie in tutto. Vuoi che ti parli di un condomino specifico? Provaci col suo nome o cognome.';
+  if (/(quali.*condomini|elenco.*condomini|lista.*condomini|tutti i condomini|nomi.*condomin)/.test(lq)) {
+    const esempi = [];
+    for (const p of palazzine) {
+      for (const f of p.famiglie) if (esempi.length < 10) esempi.push(f.nome);
     }
+    return 'Ci sono ' + totFam + ' famiglie. Ecco alcuni nomi: ' + esempi.join(', ') + '. Chiedimi ad esempio: "come ha pagato Rossi?" o "cosa deve Bianchi?".';
+  }
+  if (condomini.length) {
     if (condomini.length === 1) {
       const { p, f } = condomini[0];
       return descriviCondomino(p, f);
