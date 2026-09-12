@@ -612,11 +612,49 @@ function rispondi(q) {
     const risposta = generaRisposta(q);
     thinking.classList.remove('thinking');
     thinking.textContent = risposta;
-    if (toggleVoiceEnabled) parla(risposta);
+    parla(risposta);
   }, 400);
 }
 
 function euro(n) { return '€ ' + Number(n).toLocaleString('it-IT'); }
+
+function trovaCondomini(lq) {
+  const trovati = [];
+  const parole = lq.split(/\s+/);
+  for (const p of palazzine) {
+    for (const f of p.famiglie) {
+      const parti = f.nome.toLowerCase().split(' ');
+      const nome = parti[0];
+      const cognome = parti[parti.length - 1];
+      const match = parole.some(w =>
+        w === nome || w === cognome || (w.length > 3 && (nome.startsWith(w) || cognome.startsWith(w)))
+      );
+      if (match) trovati.push({ p, f });
+    }
+  }
+  return trovati;
+}
+
+function statoCondomino(f) {
+  return f.ratePagate === 12 ? 'aggiornato' : f.ratePagate >= 9 ? 'in_attesa' : 'in_ritardo';
+}
+
+function testoStato(s) {
+  return s === 'aggiornato' ? 'in regola' : s === 'in_attesa' ? 'in attesa di pagamento' : 'in ritardo con i pagamenti';
+}
+
+function descriviCondomino(p, f) {
+  const residuo = f.spesaAnnua - f.versato;
+  const st = statoCondomino(f);
+  const speseCorr = spese.filter(s => s.palazzinaId === p.id);
+  const totSpeseCorr = speseCorr.reduce((sum, s) => sum + s.perFamiglia, 0);
+  let t = f.nome + ' abita in ' + p.nome + ', interno ' + f.interno + '. La sua situazione è ' + testoStato(st);
+  t += '. Ha una spesa annua di ' + euro(f.spesaAnnua) + ', ha versato ' + euro(f.versato) + ' su ' + f.ratePagate + ' rate su 12';
+  if (residuo > 0) t += ', e ha un residuo da saldare di ' + euro(residuo);
+  else t += ', ed è quindi in pareggio';
+  t += '. Ha ' + speseCorr.length + ' spese correlate per un totale a suo carico di ' + euro(totSpeseCorr) + '.';
+  return t;
+}
 
 function generaRisposta(q) {
   const lq = (q || '').toLowerCase();
@@ -628,6 +666,31 @@ function generaRisposta(q) {
   const aggiornate = palazzine.reduce((s, p) => s + p.famiglie.filter(f => f.ratePagate === 12).length, 0);
 
   if (/(ciao|salve|buongiorno|hey|ehi)/.test(lq)) return 'Ciao! Chiedimi pure informazioni sulle spese condominiali, sul saldo o sulle famiglie.';
+
+  const condomini = trovaCondomini(lq);
+  if (condomini.length) {
+    if (/(quali.*condomini|elenco|lista|tutti)/.test(lq)) {
+      return 'Ci sono ' + totFam + ' famiglie in tutto. Vuoi che ti parli di un condomino specifico? Provaci col suo nome o cognome.';
+    }
+    if (condomini.length === 1) {
+      const { p, f } = condomini[0];
+      return descriviCondomino(p, f);
+    }
+    const visti = [];
+    const risposte = condomini.slice(0, 3).map(c => {
+      const k = c.f.nome;
+      if (visti.includes(k)) return null;
+      visti.push(k);
+      const residuo = c.f.spesaAnnua - c.f.versato;
+      return c.f.nome + ' (' + c.p.nome + '): ' + testoStato(statoCondomino(c.f)) + ', residuo ' + euro(residuo);
+    }).filter(Boolean);
+    if (risposte.length === 1) {
+      const c = condomini[0];
+      return descriviCondomino(c.p, c.f);
+    }
+    return 'Ho trovato ' + risposte.length + ' condomini con questo nome: ' + risposte.join('; ') + '. Dimmi cognome o nome completo per il dettaglio.';
+  }
+
   if (/((spesa|importo|totale).*(totale|documentat)|totale.*(spese|spesa)|quanto.*(speso|cost|spesa)|spese totali|budget)/.test(lq)) {
     return 'La spesa totale documentata è ' + euro(totSpesa) + ', suddivisa in ' + spese.length + ' documenti di spesa.';
   }
@@ -678,7 +741,7 @@ function generaRisposta(q) {
     const imp = spese.filter(s => s.categoria === 'Pulizia').reduce((a, s) => a + s.importo, 0);
     return 'Per la pulizia risultano spese per ' + euro(imp) + ' nel periodo considerato.';
   }
-  return 'Posso aiutarti con domande sulle spese totali, sul saldo, sulle famiglie in ritardo, sulle quote mensili o sulle singole categorie di spesa (ascensore, luce, pulizia, manutenzione, portierato). Prova a chiedermi, ad esempio: "quanto abbiamo speso in totale?".';
+  return 'Posso aiutarti con domande sulle spese totali, sul saldo, sulle famiglie in ritardo, sulle quote mensili o sulle singole categorie di spesa (ascensore, luce, pulizia, manutenzione, portierato). Inoltre conosco i singoli condomini: chiedimi per nome o cognome, ad esempio "come ha pagato Rossi?" o "quanto deve la famiglia Bianchi?".';
 }
 
 /* Riconoscimento vocale (Chrome/Edge) */
