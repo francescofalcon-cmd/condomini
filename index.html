@@ -744,35 +744,69 @@ function generaRisposta(q) {
   return 'Posso aiutarti con domande sulle spese totali, sul saldo, sulle famiglie in ritardo, sulle quote mensili o sulle singole categorie di spesa (ascensore, luce, pulizia, manutenzione, portierato). Inoltre conosco i singoli condomini: chiedimi per nome o cognome, ad esempio "come ha pagato Rossi?" o "quanto deve la famiglia Bianchi?".';
 }
 
-/* Riconoscimento vocale (Chrome/Edge) */
+/* Riconoscimento vocale (Chrome/Edge/Safari) */
 let recognition = null;
 let toggleVoiceEnabled = false;
+let riconoscimentoAttivo = false;
 
-function initVoice() {
+function nuovaRiconoscimento() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { document.getElementById('chatMic').title = 'Dettatura non supportata'; return; }
-  recognition = new SR();
-  recognition.lang = 'it-IT';
-  recognition.interimResults = false;
-  recognition.onresult = function (e) {
+  if (!SR) return null;
+  const r = new SR();
+  r.lang = 'it-IT';
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+  r.continuous = false;
+  r.onresult = function (e) {
     const testo = e.results[0][0].transcript;
     document.getElementById('chatInput').value = testo;
-    toggleVoiceEnabled = false;
     stopVoiceUi();
     sendChat();
   };
-  recognition.onerror = function () { stopVoiceUi(); };
-  recognition.onend = function () { stopVoiceUi(); };
+  r.onerror = function (e) {
+    stopVoiceUi();
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      addChatMsg('ai', 'Non ho accesso al microfono. Clicca sull\'icona del lucchetto in alto a sinistra nella barra indirizzi e consenti l\'uso del microfono, poi riprova.');
+    } else if (e.error === 'no-speech') {
+      addChatMsg('ai', 'Non ti ho sentito. Premi di nuovo il microfono e parla vicino al microfono.');
+    } else if (e.error === 'network') {
+      addChatMsg('ai', 'La dettatura richiede internet. Controlla la connessione e riprova.');
+    } else if (e.error === 'aborted') {
+      /* interruzione voluta */
+    } else {
+      addChatMsg('ai', 'Errore di riconoscimento: ' + e.error + '. Riprova.');
+    }
+  };
+  r.onend = function () {
+    stopVoiceUi();
+  };
+  return r;
+}
+
+function initVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    document.getElementById('chatMic').title = 'Dettatura non supportata';
+    document.getElementById('chatMic').disabled = true;
+    addChatMsg('ai', 'La dettatura vocale non è supportata da questo browser. Usa Chrome, Edge o Safari, oppure scrivi le domande qui sotto.');
+    return;
+  }
+  recognition = nuovaRiconoscimento();
 }
 
 function toggleVoice() {
   if (!recognition) { alert('La dettatura vocale funziona su Chrome, Edge o Safari. Usa un browser compatibile.'); return; }
   if (toggleVoiceEnabled) { stopVoiceUi(); recognition.stop(); return; }
+  if (recognition) { try { recognition.abort(); } catch (e) {} }
+  let r = nuovaRiconoscimento();
+  if (!r) { alert('Browser non compatibile con la dettatura vocale.'); return; }
+  recognition = r;
   try {
     recognition.start();
     toggleVoiceEnabled = true;
+    riconoscimentoAttivo = true;
     document.getElementById('chatMic').classList.add('listening');
-    document.getElementById('chatMic').textContent = '&#9672;';
+    document.getElementById('chatMic').innerHTML = '&#9724;';
     addChatMsg('ai', 'Ti ascolto, parla pure...');
     window.speechSynthesis.cancel();
   } catch (e) { stopVoiceUi(); }
@@ -780,8 +814,9 @@ function toggleVoice() {
 
 function stopVoiceUi() {
   toggleVoiceEnabled = false;
+  riconoscimentoAttivo = false;
   const mic = document.getElementById('chatMic');
-  if (mic) { mic.classList.remove('listening'); mic.textContent = '&#127908;'; }
+  if (mic) { mic.classList.remove('listening'); mic.innerHTML = '&#127908;'; }
 }
 
 function parla(testo) {
