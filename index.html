@@ -50,6 +50,11 @@
   .cal-dot.richiesto { background: var(--primary); }
   .cal-dot.confermato { background: #b06000; }
   .cal-dot.completato { background: var(--green); }
+  .grafici-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.2rem; }
+  .grafici-card { background: var(--card); border-radius: 8px; padding: 1rem; box-shadow: var(--shadow); }
+  .grafici-card h4 { font-size: .9rem; margin-bottom: .75rem; color: var(--text); }
+  .grafici-card canvas { width: 100%; height: 220px; display: block; }
+  .grafici-footer { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; }
   .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border); }
   .tabs button { padding: .7rem 1.5rem; border: none; background: none; cursor: pointer; font-size: .9rem; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; font-weight: 500; }
   .tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
@@ -202,6 +207,7 @@
     <button onclick="showTab('dettaglio')">Dettaglio Famiglie</button>
     <button onclick="showTab('spese')">Elenco Spese</button>
     <button onclick="showTab('appuntamenti')">&#128197; Appuntamenti</button>
+    <button onclick="showTab('grafici')">&#128202; Grafici</button>
   </div>
 
   <!-- TAB: RIEPILOGO -->
@@ -304,6 +310,14 @@
     <div id="calGiornoDetail"></div>
     <h3 style="margin-top:1.5rem">Elenco appuntamenti</h3>
     <div id="appuntamentiList"></div>
+  </div>
+
+  <!-- PANEL: GRAFICI -->
+  <div class="panel" id="panel-grafici">
+    <div class="toolbar">
+      <span>Grafici riservati all'amministratore</span>
+    </div>
+    <div class="grafici-grid" id="graficiGrid"></div>
   </div>
 
   <!-- PANEL: AREA CONDOMINO -->
@@ -823,6 +837,171 @@ function nomePalazzina(id) {
   return p ? p.nome : '—';
 }
 
+/* ---------- GRAFICI ADMIN ---------- */
+function euroN(n) { return '€' + Number(n).toLocaleString('it-IT'); }
+
+function graficoBarre(elemento, dati, conf) {
+  const canvas = typeof elemento === 'string' ? document.getElementById(elemento) : elemento;
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 600;
+  const h = 220;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const style = getComputedStyle(document.body);
+  const colPrimary = conf && conf.colore ? conf.colore : (style.getPropertyValue('--primary') || '#1a73e8').trim();
+  const colTrack = '#e8eaed';
+  const colText = (style.getPropertyValue('--text-muted') || '#5f6368').trim();
+  const colGrid = '#dadce0';
+
+  const padL = 58, padR = 12, padT = 14, padB = 30;
+  const maxVal = Math.max.apply(null, dati.map(d => d.v)) || 1;
+  const figW = (w - padL - padR);
+  const figH = h - padT - padB;
+  const n = dati.length;
+  const slot = figW / n;
+  const barW = Math.min(slot * 0.55, 52);
+
+  ctx.strokeStyle = colGrid;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = colText;
+  ctx.font = '10px Segoe UI, sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + figH - (figH * i / 4);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(w - padR, y);
+    ctx.stroke();
+    ctx.fillText('€' + (maxVal * i / 4).toLocaleString('it-IT', { maximumFractionDigits: 0 }), padL - 5, y + 3);
+  }
+
+  dati.forEach((d, i) => {
+    const x = padL + slot * i + (slot - barW) / 2;
+    const bh = Math.max(d.v > 0 ? (d.v / maxVal) * figH : 2, d.v > 0 ? 2 : 0);
+    const y = padT + figH - bh;
+    ctx.fillStyle = colPrimary;
+    ctx.globalAlpha = d.v > 0 ? 1 : 0.12;
+    ctx.fillRect(x, y, barW, bh);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = colText;
+    ctx.textAlign = 'center';
+    ctx.font = '10px Segoe UI, sans-serif';
+    ctx.fillText(d.l, x + barW / 2, h - 6);
+  });
+}
+
+function graficoAnello(elemento, dati) {
+  const canvas = typeof elemento === 'string' ? document.getElementById(elemento) : elemento;
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 600;
+  const h = 220;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const tot = dati.reduce((s, d) => s + d.v, 0);
+  const cx = Math.min(w * 0.32, 120), cy = h / 2, r = Math.min(78, h * 0.34), spessore = 26;
+
+  let ang = -Math.PI / 2;
+  dati.forEach(d => {
+    const frac = tot > 0 ? d.v / tot : 0;
+    ctx.beginPath();
+    ctx.strokeStyle = d.c;
+    ctx.lineWidth = spessore;
+    ctx.arc(cx, cy, r, ang, ang + frac * Math.PI * 2);
+    ctx.stroke();
+    ang += frac * Math.PI * 2;
+  });
+
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#202124';
+  ctx.font = 'bold 16px Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(String(tot), cx, cy - 2);
+  ctx.font = '10px Segoe UI, sans-serif';
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#5f6368';
+  ctx.fillText('totale', cx, cy + 14);
+
+  let ly = 20;
+  ctx.textAlign = 'left';
+  dati.forEach(d => {
+    ctx.fillStyle = d.c;
+    ctx.fillRect(w * 0.45, ly - 8, 12, 12);
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#202124';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText(d.l + ': ' + d.v, w * 0.45 + 18, ly);
+    ly += 22;
+  });
+}
+
+function renderGrafici() {
+  const grid = document.getElementById('graficiGrid');
+  if (!grid) return;
+
+  const perCategoria = {};
+  spese.forEach(s => { perCategoria[s.categoria] = (perCategoria[s.categoria] || 0) + s.importo; });
+  const dataCat = Object.keys(perCategoria).map(k => ({ l: k, v: Math.round(perCategoria[k]) }))
+    .sort((a, b) => b.v - a.v);
+
+  const perPalazzina = {};
+  spese.forEach(s => {
+    const nome = nomePalazzina(s.palazzinaId);
+    perPalazzina[nome] = (perPalazzina[nome] || 0) + s.importo;
+  });
+  const dataPal = Object.keys(perPalazzina).map(k => ({ l: k, v: Math.round(perPalazzina[k]) }))
+    .sort((a, b) => b.v - a.v);
+
+  const perMese = {};
+  spese.forEach(s => {
+    const chiave = s.data.slice(0, 7);
+    perMese[chiave] = (perMese[chiave] || 0) + s.importo;
+  });
+  const dataMese = Object.keys(perMese).sort().map(k => {
+    const [yy, mm] = k.split('-');
+    return { l: MESE[Number(mm) - 1] + ' ' + yy.slice(2), v: Math.round(perMese[k]) };
+  });
+
+  const st = { aggiornato: 0, in_attesa: 0, in_ritardo: 0 };
+  palazzine.forEach(p => p.famiglie.forEach(f => st[statoCondomino(f)]++));
+  const dataStati = [
+    { l: 'Aggiornate', v: st.aggiornato, c: '#34a853' },
+    { l: 'In attesa', v: st.in_attesa, c: '#fbbc04' },
+    { l: 'In ritardo', v: st.in_ritardo, c: '#ea4335' }
+  ];
+
+  const dataQuota = palazzine.map(p => {
+    const totSpesa = p.famiglie.reduce((s2, f) => s2 + f.spesaAnnua, 0);
+    const totVersato = p.famiglie.reduce((s2, f) => s2 + f.versato, 0);
+    return { l: p.nome, v: Math.round(totVersato - totSpesa) };
+  });
+
+  grid.innerHTML = `
+    <div class="grafici-card"><h4>Spese per categoria</h4><canvas id="gCategoria"></canvas></div>
+    <div class="grafici-card"><h4>Spese per palazzina</h4><canvas id="gPalazzina"></canvas></div>
+    <div class="grafici-card"><h4>Andamento spese per mese</h4><canvas id="gMese"></canvas></div>
+    <div class="grafici-card"><h4>Situazione pagamenti famiglie</h4><canvas id="gStati"></canvas></div>
+    <div class="grafici-card"><h4>Saldo per palazzina</h4><canvas id="gSaldo"></canvas></div>
+  `;
+
+  requestAnimationFrame(() => {
+    graficoBarre('gCategoria', dataCat);
+    graficoBarre('gPalazzina', dataPal);
+    graficoBarre('gMese', dataMese);
+    graficoAnello('gStati', dataStati);
+    const statoSaldo = getComputedStyle(document.body).getPropertyValue('--red') || '#ea4335';
+    graficoBarre('gSaldo', dataQuota, { colore: statoSaldo });
+    const foot = grid.querySelectorAll('.grafici-card');
+    if (foot.length) grid.insertAdjacentHTML('beforeend', `<div class="grafici-footer">Grafici generati dai dati correnti. Valori in euro; il saldo per palazzina è (versato − spesa annua).</div>`);
+  });
+}
+
 function eliminaSpesa(id) {
   spese = spese.filter(s => s.id !== id);
   renderAll();
@@ -834,6 +1013,7 @@ function showTab(tab) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'grafici') renderGrafici();
 }
 
 function openModal(type) {
