@@ -311,6 +311,39 @@ const PALAZZINE_NOMI = [
 const CATEGORIE = ['Luce comune','Gas','Acqua','Ascensore','Portierato','Pulizia','Manutenzione','Assicurazione','Amministrazione','Altro'];
 const MESE = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
 
+/* Regolamento condominiale: array di articoli per l'assistente vocale */
+const REGOLAMENTO = [
+  { n: 1, tit: 'Costituzione del Condominio', k: ['costituz'], s: 'Il regolamento disciplina i diritti e gli obblighi dei proprietari, l\'uso delle cose comuni, i limiti alle proprietà esclusive, la ripartizione delle spese e la tutela del decoro. E\' obbligatorio per tutti i proprietari, gli eredi e gli inquilini.' },
+  { n: 2, tit: 'Composizione del Condominio', k: ['composit'], s: 'Il condominio è costituito da tutti i proprietari di immobili nell\'edificio e dalle parti di uso comune esistenti nel fabbricato.' },
+  { n: 3, tit: 'Descrizione del fabbricato', k: ['fabbricat','piani'], s: 'Il fabbricato comprende il piano interrato con garages e cantine, il piano terra con porticato, sala riunioni e atrio, sei piani di appartamenti e la copertura con terrazza, lavanderia e stenditoio comuni.' },
+  { n: 4, tit: 'Cose comuni e indivisibili', k: ['cose comuni','indivisib','tetto','androni','muri maestri','colonne'], s: 'Sono comuni e indivisibili: l\'area su cui sorge l\'edificio, le fondazioni, i muri maestri, il tetto, gli impianti di riscaldamento, fognature e le colonne di acqua, luce e gas fino alla diramazione, gli androni, i portici, i viali, le scale e gli ascensori.' },
+  { n: 5, tit: 'Cose comuni divisibili', k: ['lastric'], s: 'I lastrici solari e le terrazze non destinate ai servizi comuni sono comuni ma divisibili solo tra i condomini dei piani compresi nel fabbricato.' },
+  { n: 6, tit: 'Quote di comproprietà', k: ['millesimi','quote di comproprietà'], s: 'Le quote di comproprietà sono espresse in millesimi nelle tabelle allegate. Non è consentito abbandonare o rinunciare alla comproprietà per sottrarsi alle spese.' },
+  { n: 7, tit: 'Norme generali', k: ['buon vicinato','tolleranz'], s: 'Il condomino non deve danneggiare le parti comuni né impedirne l\'uso agli altri, deve rispettare la pulizia dei locali comuni e osservare le norme di buon vicinato.' },
+  { n: 8, tit: 'Uso degli impianti e locali comuni', k: ['lavatoi','stender','bambini','cabina','cantine','autorimesse','gpl','uso dell ascensore'], s: 'Lavatoi e terrazze si usano secondo i turni e vanno lasciati puliti. Ai bambini è vietato l\'uso dell\'ascensore; in cabina non si introducono animali pericolosi, bagagli o merci pesanti. Nei garages e nelle cantine va chiuso l\'accesso, spenta la luce, e non si lavano le auto né si sosta con veicoli a GPL.' },
+  { n: 9, tit: 'Modificazioni delle cose comuni', k: ['innovazion'], s: 'Non si possono variare o innovare le parti comuni senza il consenso della maggioranza dei due terzi dei condomini interessati.' },
+  { n: 10, tit: 'Obblighi', k: ['obblighi','sopraelevaz','controlli','vendita','locazioni','domicilio'], s: 'Il condomino deve permettere controlli e lavori sulle parti comuni, comunicare all\'amministratore opere, vendite, locazioni e il proprio domicilio. La sopraelevazione richiede le autorizzazioni comunali e il benestare dell\'assemblea.' },
+  { n: 11, tit: 'Divieti', k: ['vietat','divieti','decoro','rumor','insegne','balconi','facciata','davanzali','fioriere','finestre','giardini','animali'], s: 'E\' vietato usare gli immobili contro il decoro, alterare le strutture o la facciata, occupare le parti comuni, apporre insegne, allevare animali pericolosi, fare rumore nelle ore di riposo e dopo le 23, gettare rifiuti negli scarichi o acqua dalle finestre e calpestare i giardini.' },
+  { n: 12, tit: 'Manutenzione ordinaria, straordinaria e migliorie', k: ['manutenzion','migliori'], s: 'Si distinguono la manutenzione ordinaria, cioè le riparazioni dovute all\'uso, la manutenzione straordinaria, che riguarda lavori strutturali di ampia portata, e le migliorie, che modificano in modo sostanziale le parti comuni.' },
+  { n: 13, tit: 'Esecuzione dei lavori', k: ['fondi','stanziamento','urgent'], s: 'I lavori sono deliberati dall\'assemblea su proposta dell\'amministratore. Quelli urgenti, decisi per pericolo o per ordinanze, vanno eseguiti subito e l\'assemblea viene convocata al più presto per la ratifica.' },
+  { n: 14, tit: 'Ripartizione spese', k: ['ripartizion','ripartit','proporzional'], s: 'Le spese per la conservazione e l\'uso delle parti comuni si ripartiscono in proporzione al valore delle unità immobiliari, espresso in millesimi; quelle per i servizi comuni in proporzione all\'uso che ciascuno può farne.' },
+  { n: 15, tit: 'Suddivisione delle spese', k: ['suddivision'], s: 'Le spese generali seguono le tabelle di proprietà; scale, ascensore e riscaldamento seguono tabelle specifiche di servizio. Le tabelle si modificano solo per errore o per mutate condizioni.' },
+  { n: 16, tit: 'Assicurazione', k: ['assicurazion','polizz','sinistri'], s: 'L\'assemblea stabilisce la copertura del fabbricato contro fuoco, fulmini e scoppio per perdite di gas. I sinistri sulle parti comuni sono denunciati dall\'amministratore, quelli sugli appartamenti dai singoli condomini tramite l\'amministratore.' },
+  { n: 17, tit: 'Scale e lastrici solari', k: ['scale e','copertura'], s: 'Le spese di manutenzione e ricostruzione delle scale si ripartiscono secondo l\'articolo 1124 del Codice Civile; i lastrici solari comuni come le altre spese del fabbricato, quelli di uso esclusivo ai sensi dell\'articolo 1126.' },
+  { n: 18, tit: 'Ascensore', k: ['ascensore e le spese','ascensore manutenzione','tabella di servizio'], s: 'Le spese di manutenzione dell\'ascensore seguono la tabella di servizio allegata; gli alloggi usati anche a scopo professionale pagano una percentuale in più stabilita dall\'assemblea.' },
+  { n: 19, tit: 'Riscaldamento', k: ['riscaldam','termosifon','sigill'], s: 'Le spese di manutenzione ed esercizio del riscaldamento si ripartiscono secondo la tabella millesimale. Chi rinuncia al riscaldamento, previa delibera, paga una quota ridotta e l\'amministratore può sigillare i termosifoni.' },
+  { n: 20, tit: 'Acqua', k: ['contatori'], s: 'Ai consumi d\'acqua, esclusi quelli dei contatori individuali, contribuiscono i condomini in base ai millesimi; l\'assemblea può adottare criteri diversi per i consumi passati.' },
+  { n: 21, tit: 'Illuminazione', k: ['illuminazion'], s: 'Le spese per l\'illuminazione di giardino, androni, garages e beni comuni si ripartiscono in base ai millesimi della tabella allegata.' },
+  { n: 22, tit: 'Custodia', k: ['custodia','vigilanz','guardian'], s: 'Il servizio di custodia e vigilanza dipende dall\'assemblea, che ne decide nomina e revoca. Le relative spese si ripartiscono in base ai millesimi di proprietà.' },
+  { n: 23, tit: 'Pulizia e servizi particolari', k: ['pulizi','appalto'], s: 'La pulizia delle parti comuni e i servizi ausiliari sono gestiti dall\'amministratore, che può affidarli a ditte specializzate, a privati o al personale di custodia.' },
+  { n: 24, tit: 'Quote condominiali', k: ['conguaglio','fondo condominiale','anticipo'], s: 'Ogni condomino paga mensilmente e in anticipo le quote per l\'esercizio, il fondo condominiale e il risparmio per la manutenzione straordinaria, più eventuali conguagli a debito.' },
+  { n: 25, tit: 'Mancato o ritardato pagamento', k: ['ingiunzion','distacco','sospension','ritardo pagamento'], s: 'In caso di ritardo reiterato l\'amministratore può agire con decreto ingiuntivo e arrivare alla sospensione dei servizi comuni; le spese di distacco e ripristino sono a carico del moroso.' },
+  { n: 26, tit: 'Assemblea', k: ['assemblea','convocaz','quorum','deliber','presidente','verbale','maggioranza'], s: 'L\'assemblea è l\'organo deliberante: va convocata almeno una volta l\'anno con preavviso di almeno 5 giorni. In prima convocazione servono due terzi del valore e la maggioranza dei partecipanti; in seconda convocazione un terzo di entrambi.' },
+  { n: 27, tit: 'Amministratore', k: ['amministrator','revoca','compenso'], s: 'L\'assemblea nomina ogni anno l\'amministratore, che convoca l\'assemblea, gestisce i servizi, predispone bilanci preventivo e consuntivo, riscuote le quote, esegue le delibere e cura i documenti contabili.' },
+  { n: 28, tit: 'Esercizio condominiale', k: ['consuntivo','preventivo','bilancio'], s: 'L\'esercizio va dal primo gennaio al 31 dicembre. Entro il 10 marzo l\'amministratore presenta bilancio consuntivo, bilancio preventivo e relazione sulla gestione.' },
+  { n: 29, tit: 'Rinvio alle leggi vigenti', k: ['rinvio','codice civile'], s: 'Per quanto non previsto dal regolamento si rinvia al Codice Civile, alle disposizioni di attuazione e alle altre norme applicabili.' }
+];
+
 let palazzine = [];
 let spese = [];
 const DATA_KEY = 'condomini_dati_v1';
@@ -753,6 +786,28 @@ function normalizza(txt) {
     .split(/\s+/).filter(Boolean);
 }
 
+/* Regolamento condominiale: risponde a domande su regole, articoli, divieti, organi */
+function rispondiRegolamento(lq) {
+  const L = normalizza(lq).join(' ');
+  const numM = L.match(/(?:^|\s)art(?:icolo)?[.\s]?(\d+)(?:\s|$)/);
+  if (numM) {
+    const art = REGOLAMENTO.find(a => a.n === parseInt(numM[1], 10));
+    if (art) return 'Articolo ' + art.n + ' - ' + art.tit + ': ' + art.s;
+  }
+  const forti = ['vietat','divieti','regolament','assemblea','convocaz','amministrator','millesimi','stender','lavatoi','lastric','sigill','sopraelevaz','quorum','decoro','polizz','contatori'];
+  const attivi = numM || forti.some(f => L.includes(f));
+  if (!attivi) return null;
+  let migliori = REGOLAMENTO
+    .map(a => ({ a, p: a.k.reduce((s, kw) => s + (L.includes(kw) ? 1 : 0), 0) }))
+    .filter(x => x.p > 0)
+    .sort((x, y) => y.p - x.p);
+  if (migliori[0] && migliori[0].p > 0) {
+    const a = migliori[0].a;
+    return 'Articolo ' + a.n + ' - ' + a.tit + ': ' + a.s;
+  }
+  return 'Il regolamento condominiale conta ' + REGOLAMENTO.length + ' articoli in 5 titoli. Chiedimi ad esempio: "cosa dice l\'articolo 11?", "è vietato fare rumore dopo le 23?" oppure "come funziona l\'assemblea?".';
+}
+
 function trovaCondomini(lq) {
   const trovati = [];
   const parole = normalizza(lq);
@@ -798,8 +853,12 @@ function descriviCondomino(p, f) {
 function rispondiCondomino(lq) {
   const { p, f } = utenteCorrente;
   if (/(ciao|salve|buongiorno|hey|ehi)/.test(lq)) {
-    return 'Ciao ' + f.nome.split(' ')[0] + '! Posso dirti le tue spese, il tuo residuo o le tue quote. I dati degli altri condomini non li vedo, vedo solo i tuoi.';
+    let t = 'Ciao ' + f.nome.split(' ')[0] + '! Posso dirti le tue spese, il tuo residuo o le tue quote. I dati degli altri condomini non li vedo, vedo solo i tuoi.';
+    t += ' Se mi chiedi qualcosa sul regolamento condominiale, ad esempio "è vietato fare rumore dopo le 23?", ti rispondo.';
+    return t;
   }
+  const regRicevuto = rispondiRegolamento(lq);
+  if (regRicevuto) return regRicevuto;
   if (/((quota|mensil|rata|canone))/.test(lq)) {
     return 'La tua quota mensile è ' + euro(f.quotaMensile) + ', quindi una spesa annua di ' + euro(f.spesaAnnua) + '.';
   }
@@ -833,6 +892,9 @@ function rispondiCondomino(lq) {
 
 function generaRisposta(q) {
   const lq = (q || '').toLowerCase();
+
+  const risposteReg = rispondiRegolamento(lq);
+  if (risposteReg) return risposteReg;
 
   if (utenteCorrente && utenteCorrente.tipo === 'condomino') return rispondiCondomino(lq);
 
