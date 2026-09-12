@@ -748,37 +748,60 @@ function generaRisposta(q) {
 let recognition = null;
 let toggleVoiceEnabled = false;
 let riconoscimentoAttivo = false;
+let fermataManuale = false;
+let testoFinale = '';
+let timerSilenzio = null;
 
 function nuovaRiconoscimento() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
   const r = new SR();
   r.lang = 'it-IT';
-  r.interimResults = false;
+  r.interimResults = true;
   r.maxAlternatives = 1;
-  r.continuous = false;
+  r.continuous = true;
   r.onresult = function (e) {
-    const testo = e.results[0][0].transcript;
-    document.getElementById('chatInput').value = testo;
-    stopVoiceUi();
-    sendChat();
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const tr = e.results[i][0].transcript;
+      if (e.results[i].isFinal) testoFinale += tr;
+      else interim += tr;
+    }
+    const input = document.getElementById('chatInput');
+    input.value = (testoFinale + ' ' + interim).trim();
+    if (testoFinale) {
+      clearTimeout(timerSilenzio);
+      timerSilenzio = setTimeout(function () {
+        if (toggleVoiceEnabled) { stopVoiceUi(); sendChat(); }
+      }, 1400);
+    }
   };
   r.onerror = function (e) {
-    stopVoiceUi();
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-      addChatMsg('ai', 'Non ho accesso al microfono. Clicca sull\'icona del lucchetto in alto a sinistra nella barra indirizzi e consenti l\'uso del microfono, poi riprova.');
+      stopVoiceUi();
+      addChatMsg('ai', 'Non ho accesso al microfono. Clicca sul lucchetto in alto a sinistra, consenti il microfono e ricarica la pagina con F5, poi riprova.');
     } else if (e.error === 'no-speech') {
-      addChatMsg('ai', 'Non ti ho sentito. Premi di nuovo il microfono e parla vicino al microfono.');
+      stopVoiceUi();
+      addChatMsg('ai', 'Non ti ho sentito. Premi di nuovo il microfono e parla subito, a un passo dal microfono.');
     } else if (e.error === 'network') {
+      stopVoiceUi();
       addChatMsg('ai', 'La dettatura richiede internet. Controlla la connessione e riprova.');
     } else if (e.error === 'aborted') {
-      /* interruzione voluta */
+      if (!fermataManuale) {
+        stopVoiceUi();
+        addChatMsg('ai', 'La dettatura si è interrotta in modo inatteso. Riprova premendo di nuovo il microfono.');
+      }
     } else {
+      stopVoiceUi();
       addChatMsg('ai', 'Errore di riconoscimento: ' + e.error + '. Riprova.');
     }
   };
   r.onend = function () {
-    stopVoiceUi();
+    if (toggleVoiceEnabled && !fermataManuale && (testoFinale || document.getElementById('chatInput').value)) {
+      try { recognition = nuovaRiconoscimento(); if (recognition) recognition.start(); } catch (err) { stopVoiceUi(); }
+    } else {
+      stopVoiceUi();
+    }
   };
   return r;
 }
@@ -795,19 +818,19 @@ function initVoice() {
 }
 
 function toggleVoice() {
-  if (!recognition) { alert('La dettatura vocale funziona su Chrome, Edge o Safari. Usa un browser compatibile.'); return; }
-  if (toggleVoiceEnabled) { stopVoiceUi(); recognition.stop(); return; }
-  if (recognition) { try { recognition.abort(); } catch (e) {} }
+  if (toggleVoiceEnabled) { fermataManuale = true; try { recognition.stop(); } catch (e) {} return; }
   let r = nuovaRiconoscimento();
   if (!r) { alert('Browser non compatibile con la dettatura vocale.'); return; }
   recognition = r;
+  testoFinale = '';
+  fermataManuale = false;
   try {
     recognition.start();
     toggleVoiceEnabled = true;
     riconoscimentoAttivo = true;
     document.getElementById('chatMic').classList.add('listening');
     document.getElementById('chatMic').innerHTML = '&#9724;';
-    addChatMsg('ai', 'Ti ascolto, parla pure...');
+    addChatMsg('ai', 'Ti ascolto, parla pure... scriverò quello che sento e poi rispondo.');
     window.speechSynthesis.cancel();
   } catch (e) { stopVoiceUi(); }
 }
@@ -815,6 +838,9 @@ function toggleVoice() {
 function stopVoiceUi() {
   toggleVoiceEnabled = false;
   riconoscimentoAttivo = false;
+  fermataManuale = false;
+  clearTimeout(timerSilenzio);
+  timerSilenzio = null;
   const mic = document.getElementById('chatMic');
   if (mic) { mic.classList.remove('listening'); mic.innerHTML = '&#127908;'; }
 }
