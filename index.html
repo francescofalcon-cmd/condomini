@@ -1399,8 +1399,10 @@ function generaRisposta(q) {
   const lq = (q || '').toLowerCase();
 
   if (utenteCorrente && utenteCorrente.tipo === 'condomino') return rispondiCondomino(lq);
+  const amministratore = !!(utenteCorrente && utenteCorrente.tipo === 'admin');
 
   if (/(appuntament|richiest.*chiamat|prenotaz)/.test(lq)) {
+    if (!amministratore) return 'Gli appuntamenti telefonici li gestisce l\'amministratore. Se sei un condomino accedi con le tue credenziali e chiedi "vorrei un appuntamento" per prenotare una chiamata.';
     if (!appuntamenti.length) return 'Non ci sono ancora appuntamenti richiesti. I condomini possono prenotarli tramite la chatbox: "vorrei un appuntamento".';
     const ordinati = [...appuntamenti].sort((a, b) => (a.data + a.ora).localeCompare(b.data + b.ora));
     const inAttesa = ordinati.filter(a => a.stato === 'richiesto').length;
@@ -1423,7 +1425,9 @@ function generaRisposta(q) {
   if (/(ciao|salve|buongiorno|hey|ehi)/.test(lq)) return 'Ciao! Chiedimi pure informazioni sulle spese condominiali, sul saldo o sulle famiglie.';
 
   const condomini = trovaCondomini(lq);
+  const privacy = 'Le informazioni personali dei condomini sono riservate e le vede solo l\'amministratore. Se sei un amministratore accedi con la tua password per consultarle; se sei un condomino accedi con le tue credenziali per vedere solo i tuoi dati.';
   if (/(quali.*condomini|elenco.*condomini|lista.*condomini|tutti i condomini|nomi.*condomin)/.test(lq)) {
+    if (!amministratore) return privacy;
     const esempi = [];
     for (const p of palazzine) {
       for (const f of p.famiglie) if (esempi.length < 10) esempi.push(f.nome);
@@ -1431,6 +1435,7 @@ function generaRisposta(q) {
     return 'Ci sono ' + totFam + ' famiglie. Ecco alcuni nomi: ' + esempi.join(', ') + '. Chiedimi ad esempio: "come ha pagato Rossi?" o "cosa deve Bianchi?".';
   }
   if (condomini.length) {
+    if (!amministratore) return privacy;
     if (condomini.length === 1) {
       const { p, f } = condomini[0];
       return descriviCondomino(p, f);
@@ -1500,7 +1505,7 @@ function generaRisposta(q) {
     const imp = spese.filter(s => s.categoria === 'Pulizia').reduce((a, s) => a + s.importo, 0);
     return 'Per la pulizia risultano spese per ' + euro(imp) + ' nel periodo considerato.';
   }
-  return 'Posso aiutarti con domande sulle spese totali, sul saldo, sulle famiglie in ritardo, sulle quote mensili o sulle singole categorie di spesa (ascensore, luce, pulizia, manutenzione, portierato). Inoltre conosco i singoli condomini: chiedimi per nome o cognome, ad esempio "come ha pagato Rossi?" o "quanto deve la famiglia Bianchi?".';
+  return 'Posso aiutarti con domande sulle spese totali, sul saldo, sulle famiglie in ritardo, sulle quote mensili o sulle singole categorie di spesa (ascensore, luce, pulizia, manutenzione, portierato). ' + (amministratore ? 'Conosco anche i singoli condomini: chiedimi per nome o cognome, ad esempio "come ha pagato Rossi?" o "quanto deve la famiglia Bianchi?".' : 'I dati dei singoli condomini sono riservati e li vede solo l\'amministratore.');
 }
 
 /* Riconoscimento vocale (Chrome/Edge/Safari) */
