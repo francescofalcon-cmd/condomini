@@ -346,7 +346,14 @@ const REGOLAMENTO = [
 
 let palazzine = [];
 let spese = [];
-const DATA_KEY = 'condomini_dati_v1';
+const DATA_KEY = 'condomini_dati_v2';
+
+/* Generatore pseudo-casuale deterministico: stessi dati su ogni dispositivo */
+let rndState = 20260912;
+function rnd() {
+  rndState = (rndState * 1664525 + 1013904223) >>> 0;
+  return rndState / 4294967296;
+}
 
 function init() {
   const salvato = localStorage.getItem(DATA_KEY);
@@ -378,13 +385,13 @@ function generaDati() {
     const scale = ['A','B','C','D','E'];
     for (const scala of scale) {
       for (let f = 0; f < 4; f++) {
-        const ratePagate = Math.floor(Math.random() * 12) + 1;
-        const quotaMensile = 80 + Math.floor(Math.random() * 180);
+        const ratePagate = Math.floor(rnd() * 12) + 1;
+        const quotaMensile = 80 + Math.floor(rnd() * 180);
         famiglie.push({
           id: `${i}-${famiglie.length}`,
           interno: `${scala}${f + 1}`,
           nome: generaNome(),
-          password: String(1000 + Math.floor(Math.random() * 9000)),
+          password: String(1000 + Math.floor(rnd() * 9000)),
           quotaMensile,
           ratePagate,
           versato: ratePagate * quotaMensile,
@@ -399,15 +406,15 @@ function generaDati() {
   const anni = [2025, 2026];
   for (const a of anni) {
     for (let m = 0; m < 9; m++) {
-      const numSpese = 2 + Math.floor(Math.random() * 4);
+      const numSpese = 2 + Math.floor(rnd() * 4);
       for (let s = 0; s < numSpese; s++) {
-        const palId = Math.floor(Math.random() * 10);
-        const cat = CATEGORIE[Math.floor(Math.random() * CATEGORIE.length)];
-        const imp = 50 + Math.floor(Math.random() * 3000);
+        const palId = Math.floor(rnd() * 10);
+        const cat = CATEGORIE[Math.floor(rnd() * CATEGORIE.length)];
+        const imp = 50 + Math.floor(rnd() * 3000);
         const nFam = palazzine[palId].famiglie.length;
         spese.push({
           id: spese.length,
-          data: `${a}-${String(m+1).padStart(2,'0')}-${String(1+Math.floor(Math.random()*28)).padStart(2,'0')}`,
+          data: `${a}-${String(m+1).padStart(2,'0')}-${String(1+Math.floor(rnd()*28)).padStart(2,'0')}`,
           palazzinaId: palId,
           categoria: cat,
           descrizione: descrizioneSpesa(cat),
@@ -444,7 +451,7 @@ function popolaFiltri() {
 function generaNome() {
   const nomi = ['Marco','Giulia','Luca','Sara','Andrea','Martina','Giuseppe','Anna','Matteo','Francesca','Alessandro','Elena','Davide','Chiara','Simone','Laura','Federico','Giulia','Paolo','Alessia','Riccardo','Giovanna','Stefano','Ilaria','Michele','Lucia','Antonio','Valentina','Roberto','Silvia','Carlo','Marta','Nicola','Beatrice','Filippo','Emma','Gabriele','Giorgia'];
   const cognomi = ['Rossi','Bianchi','Romano','Colombo','Ferrari','Esposito','Ricci','Marino','Greco','Bruno','Gallo','Conti','De Luca','Mancini','Costa','Giordano','Rizzo','Lombardi','Moretti','Barbieri','Fontana','Santoro','Mariani','Rinaldi','Caruso','Fabbri','Pellegrini'];
-  return nomi[Math.floor(Math.random() * nomi.length)] + ' ' + cognomi[Math.floor(Math.random() * cognomi.length)];
+  return nomi[Math.floor(rnd() * nomi.length)] + ' ' + cognomi[Math.floor(rnd() * cognomi.length)];
 }
 
 function descrizioneSpesa(cat) {
@@ -461,7 +468,7 @@ function descrizioneSpesa(cat) {
     'Altro': ['Spese varie','Consulenza legale','Cassette postali']
   };
   const arr = m[cat] || ['Spesa generica'];
-  return arr[Math.floor(Math.random() * arr.length)];
+  return arr[Math.floor(rnd() * arr.length)];
 }
 
 function renderAll() {
@@ -694,7 +701,7 @@ function salvaFamiglia() {
   if (!interno || !nome || !quota || quota < 0) return alert('Compila tutti i campi (quota maggiore di 0)');
   const p = palazzine[palId];
   if (p.famiglie.some(f => f.interno === interno)) return alert('Interno già esistente in questa palazzina');
-  const ratePagate = Math.floor(Math.random() * 4);
+  const ratePagate = Math.floor(rnd() * 4);
   p.famiglie.push({
     id: `${palId}-${p.famiglie.length}`,
     interno,
