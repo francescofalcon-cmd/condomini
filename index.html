@@ -72,6 +72,25 @@
   .quota-input { width: 80px; padding: .3rem .4rem; border: 1px solid var(--border); border-radius: 5px; font-size: .8rem; text-align: right; font-variant-numeric: tabular-nums; }
   .quota-input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
   .inline-actions .btn-outline { padding: 2px 8px; font-size: .72rem; }
+  .chat-fab { position: fixed; bottom: 1.2rem; right: 1.2rem; width: 56px; height: 56px; border-radius: 50%; background: var(--primary); color: #fff; border: none; font-size: 1.4rem; cursor: pointer; box-shadow: 0 4px 12px rgba(26,115,232,.4); z-index: 999; }
+  .chat-fab:hover { background: var(--primary-dark); }
+  .chat-panel { position: fixed; bottom: 5.2rem; right: 1.2rem; width: 340px; max-width: calc(100vw - 2.4rem); height: 460px; max-height: calc(100vh - 7rem); background: var(--card); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.25); display: none; flex-direction: column; overflow: hidden; z-index: 998; }
+  .chat-panel.open { display: flex; }
+  .chat-header { background: var(--primary); color: #fff; padding: .8rem 1rem; display: flex; align-items: center; justify-content: space-between; }
+  .chat-header h3 { font-size: .95rem; font-weight: 600; }
+  .chat-close { background: none; border: none; color: #fff; font-size: 1.2rem; cursor: pointer; }
+  .chat-messages { flex: 1; padding: .8rem; overflow-y: auto; display: flex; flex-direction: column; gap: .5rem; background: #f8f9fa; }
+  .chat-msg { max-width: 85%; padding: .55rem .8rem; border-radius: 12px; font-size: .83rem; line-height: 1.4; white-space: pre-wrap; }
+  .chat-msg.user { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 2px; }
+  .chat-msg.ai { align-self: flex-start; background: var(--card); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 2px; }
+  .chat-msg.ai.thinking { color: var(--text-muted); font-style: italic; }
+  .chat-input-bar { display: flex; gap: .5rem; padding: .6rem; border-top: 1px solid var(--border); align-items: center; }
+  .chat-input-bar input { flex: 1; padding: .55rem .7rem; border: 1px solid var(--border); border-radius: 20px; font-size: .83rem; }
+  .chat-input-bar input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+  .chat-mic { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--primary); color: #fff; font-size: 1rem; cursor: pointer; flex-shrink: 0; }
+  .chat-mic.listening { background: var(--red); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(234,67,53,.5); } 50% { box-shadow: 0 0 0 8px rgba(234,67,53,0); } }
+  .chat-send { padding: .55rem 1rem; border: none; border-radius: 20px; background: var(--primary); color: #fff; font-size: .83rem; cursor: pointer; }
   @media (max-width: 768px) {
     header { padding: .75rem 1rem; }
     .container { padding: 1rem; }
@@ -174,6 +193,21 @@
       </thead>
       <tbody id="speseBody"></tbody>
     </table>
+  </div>
+</div>
+
+<!-- ASSISTENTE VOCALE -->
+<button class="chat-fab" onclick="toggleChat()" title="Assistente vocale">&#128172;</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-header">
+    <h3>&#127908; Assistente Vocale</h3>
+    <button class="chat-close" onclick="toggleChat()">&times;</button>
+  </div>
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="chat-input-bar">
+    <input type="text" id="chatInput" placeholder="Scrivi o parla..." onkeydown="if(event.key==='Enter')sendChat()">
+    <button class="chat-mic" id="chatMic" onclick="toggleVoice()" title="Parla">&#127908;</button>
+    <button class="chat-send" onclick="sendChat()">&#10148;</button>
   </div>
 </div>
 
@@ -507,6 +541,161 @@ function salvaFamiglia() {
   closeModal();
   renderAll();
 }
+
+/* ---------- ASSISTENTE VOCALE ---------- */
+const chatMessages = [];
+
+function toggleChat() {
+  const p = document.getElementById('chatPanel');
+  p.classList.toggle('open');
+  if (p.classList.contains('open') && !chatMessages.length) addChatMsg('ai', 'Ciao! Sono il tuo assistente condominiale. Puoi farmi domande sulle spese, sulle famiglie o sul saldo. Premi il microfono per parlare oppure scrivi qui sotto. ');
+}
+
+function addChatMsg(role, text) {
+  chatMessages.push({ role, text });
+  const box = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + role;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+function sendChat() {
+  const input = document.getElementById('chatInput');
+  const q = input.value.trim();
+  if (!q) return;
+  addChatMsg('user', q);
+  input.value = '';
+  rispondi(q);
+}
+
+function rispondi(q) {
+  const thinking = addChatMsg('ai', '...');
+  thinking.classList.add('thinking');
+  setTimeout(() => {
+    const risposta = generaRisposta(q);
+    thinking.classList.remove('thinking');
+    thinking.textContent = risposta;
+    if (toggleVoiceEnabled) parla(risposta);
+  }, 400);
+}
+
+function euro(n) { return '€ ' + Number(n).toLocaleString('it-IT'); }
+
+function generaRisposta(q) {
+  const lq = (q || '').toLowerCase();
+  const totFam = palazzine.reduce((s, p) => s + p.famiglie.length, 0);
+  const totSpesa = spese.reduce((s, sp) => s + sp.importo, 0);
+  const totVersato = palazzine.reduce((s, p) => s + p.famiglie.reduce((sf, f) => sf + f.versato, 0), 0);
+  const totDovuto = palazzine.reduce((s, p) => s + p.famiglie.reduce((sf, f) => sf + f.spesaAnnua, 0), 0);
+  const inRitardo = palazzine.reduce((s, p) => s + p.famiglie.filter(f => f.ratePagate <= 8).length, 0);
+  const aggiornate = palazzine.reduce((s, p) => s + p.famiglie.filter(f => f.ratePagate === 12).length, 0);
+
+  if (/(ciao|salve|buongiorno|hey|ehi)/.test(lq)) return 'Ciao! Chiedimi pure informazioni sulle spese condominiali, sul saldo o sulle famiglie.';
+  if (/((spesa|importo|totale).*(totale|documentat)|totale.*(spese|spesa)|quanto.*(speso|cost|spesa)|spese totali|budget)/.test(lq)) {
+    return 'La spesa totale documentata è ' + euro(totSpesa) + ', suddivisa in ' + spese.length + ' documenti di spesa.';
+  }
+  if (/(saldo|bilancio|in pari|debito|avere)/.test(lq)) {
+    const saldo = totVersato - totDovuto;
+    const s = saldo >= 0 ? 'il condominio è in pari, con un saldo positivo di ' + euro(saldo) : 'ci sono ancora ' + euro(Math.abs(saldo)) + ' da riscuotere';
+    return 'Il totale versato dalle famiglie è ' + euro(totVersato) + ' su ' + euro(totDovuto) + ' dovuti. Quindi ' + s + '.';
+  }
+  if (/(famigli|quante|nuclei)/.test(lq) && (/(tutte|total|quante|numero)/.test(lq) || !/(ritardo|aggiornat|residuo)/.test(lq))) {
+    return 'Ci sono ' + totFam + ' famiglie distribuite in ' + palazzine.length + ' palazzine.';
+  }
+  if (/(ritardo|moroso|moros|insolvent|non.*pagat|in ritardo)/.test(lq)) {
+    return 'Attualmente ' + inRitardo + ' famiglie su ' + totFam + ' sono in ritardo con i pagamenti.';
+  }
+  if (/(aggiornat|pagat|in regola|rate)/.test(lq)) {
+    return 'Sono aggiornate ' + aggiornate + ' famiglie su ' + totFam + ' totali.';
+  }
+  if (/(palazzin|edific|stabili|torr)/.test(lq)) {
+    const pal = palazzine[0];
+    const lista = palazzine.slice(0, 4).map(p => p.nome).join(', ');
+    return 'Ci sono ' + palazzine.length + ' palazzine: ' + lista + (palazzine.length > 4 ? ' e altre.' : '.');
+  }
+  if (/(quota|mensil|canone|rata)/.test(lq)) {
+    const medie = [];
+    palazzine.forEach(p => {
+      p.famiglie.forEach(f => medie.push(f.quotaMensile));
+    });
+    const media = medie.reduce((a, b) => a + b, 0) / (medie.length || 1);
+    return 'La quota mensile varia da famiglia a famiglia. In media è ' + euro(Math.round(media)) + ' al mese.';
+  }
+  if (/(ascensore|lift)/.test(lq)) {
+    const imp = spese.filter(s => s.categoria === 'Ascensore').reduce((a, s) => a + s.importo, 0);
+    return 'Per l\'ascensore risultano spese per ' + euro(imp) + ' nel periodo considerato.';
+  }
+  if (/(portier|portin|portiere)/.test(lq)) {
+    const imp = spese.filter(s => s.categoria === 'Portierato').reduce((a, s) => a + s.importo, 0);
+    return 'Per il portierato risultano spese per ' + euro(imp) + ' nel periodo considerato.';
+  }
+  if (/(luce|luci|illuminazione|elettric)/.test(lq)) {
+    const imp = spese.filter(s => s.categoria === 'Luce comune').reduce((a, s) => a + s.importo, 0);
+    return 'Per la luce comune risultano spese per ' + euro(imp) + ' nel periodo considerato.';
+  }
+  if (/(manutenzion|rinnovo|lavori)/.test(lq)) {
+    const imp = spese.filter(s => s.categoria === 'Manutenzione').reduce((a, s) => a + s.importo, 0);
+    return 'Per la manutenzione risultano spese per ' + euro(imp) + ' nel periodo considerato.';
+  }
+  if (/(pulizi|pulizia)/.test(lq)) {
+    const imp = spese.filter(s => s.categoria === 'Pulizia').reduce((a, s) => a + s.importo, 0);
+    return 'Per la pulizia risultano spese per ' + euro(imp) + ' nel periodo considerato.';
+  }
+  return 'Posso aiutarti con domande sulle spese totali, sul saldo, sulle famiglie in ritardo, sulle quote mensili o sulle singole categorie di spesa (ascensore, luce, pulizia, manutenzione, portierato). Prova a chiedermi, ad esempio: "quanto abbiamo speso in totale?".';
+}
+
+/* Riconoscimento vocale (Chrome/Edge) */
+let recognition = null;
+let toggleVoiceEnabled = false;
+
+function initVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('chatMic').title = 'Dettatura non supportata'; return; }
+  recognition = new SR();
+  recognition.lang = 'it-IT';
+  recognition.interimResults = false;
+  recognition.onresult = function (e) {
+    const testo = e.results[0][0].transcript;
+    document.getElementById('chatInput').value = testo;
+    toggleVoiceEnabled = false;
+    stopVoiceUi();
+    sendChat();
+  };
+  recognition.onerror = function () { stopVoiceUi(); };
+  recognition.onend = function () { stopVoiceUi(); };
+}
+
+function toggleVoice() {
+  if (!recognition) { alert('La dettatura vocale funziona su Chrome, Edge o Safari. Usa un browser compatibile.'); return; }
+  if (toggleVoiceEnabled) { stopVoiceUi(); recognition.stop(); return; }
+  try {
+    recognition.start();
+    toggleVoiceEnabled = true;
+    document.getElementById('chatMic').classList.add('listening');
+    document.getElementById('chatMic').textContent = '&#9672;';
+    addChatMsg('ai', 'Ti ascolto, parla pure...');
+    window.speechSynthesis.cancel();
+  } catch (e) { stopVoiceUi(); }
+}
+
+function stopVoiceUi() {
+  toggleVoiceEnabled = false;
+  const mic = document.getElementById('chatMic');
+  if (mic) { mic.classList.remove('listening'); mic.textContent = '&#127908;'; }
+}
+
+function parla(testo) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(testo);
+  u.lang = 'it-IT';
+  window.speechSynthesis.speak(u);
+}
+
+initVoice();
 
 init();
 </script>
