@@ -136,11 +136,15 @@
     <div class="login-form" id="loginFormCond">
       <div class="form-group">
         <label>Indirizzo palazzina</label>
-        <select id="loginPalazzina" onchange="popolaInterni()"></select>
+        <select id="loginPalazzina" onchange="document.getElementById('loginSceltaFamiglia').style.display='none';document.getElementById('loginNome').value='';document.getElementById('loginPasswordCond').value=''"></select>
       </div>
       <div class="form-group">
         <label>Cognome</label>
-        <input type="text" id="loginNome" placeholder="Il tuo cognome (es. Rossi)">
+        <input type="text" id="loginNome" placeholder="Il tuo cognome (es. Rossi)" oninput="aggiornaSceltaFamiglia()">
+      </div>
+      <div class="form-group" id="loginSceltaFamigliaWrap" style="display:none">
+        <label>Quale famiglia?</label>
+        <select id="loginSceltaFamiglia"></select>
       </div>
       <div class="form-group">
         <label>Password personale</label>
@@ -1047,6 +1051,21 @@ function popolaInterni() {
   return palazzine[palId].famiglie;
 }
 
+function aggiornaSceltaFamiglia() {
+  const wrap = document.getElementById('loginSceltaFamigliaWrap');
+  const sel = document.getElementById('loginSceltaFamiglia');
+  const palId = Number(document.getElementById('loginPalazzina').value);
+  const nome = document.getElementById('loginNome').value.trim().toLowerCase();
+  if (!nome || !palazzine[palId]) { wrap.style.display = 'none'; return; }
+  const famiglie = palazzine[palId].famiglie.filter(x => x.nome.split(' ').pop().toLowerCase() === nome);
+  if (famiglie.length > 1) {
+    sel.innerHTML = famiglie.map(f => `<option value="${f.id}">Interno ${f.interno} · ${f.nome}</option>`).join('');
+    wrap.style.display = 'block';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
 function accediCondomino() {
   const palId = Number(document.getElementById('loginPalazzina').value);
   const nome = document.getElementById('loginNome').value.trim().toLowerCase();
@@ -1056,10 +1075,17 @@ function accediCondomino() {
   if (!pw) { err.textContent = 'Inserisci la password personale.'; return; }
   const famiglie = palazzine[palId].famiglie.filter(x => x.nome.split(' ').pop().toLowerCase() === nome);
   if (!famiglie.length) { err.textContent = 'Nessun condomino con questo cognome in questa palazzina.'; return; }
-  if (famiglie.length > 1) { err.textContent = 'Ci sono più famiglie con questo cognome. Contatta l\'amministratore.'; return; }
-  const f = famiglie[0];
+  let f;
+  if (famiglie.length > 1) {
+    const scelta = document.getElementById('loginSceltaFamiglia').value;
+    f = famiglie.find(x => x.id === scelta);
+    if (!f) { err.textContent = 'Seleziona la tua famiglia nell\'elenco.'; return; }
+  } else {
+    f = famiglie[0];
+  }
   if (pw !== f.password) { err.textContent = 'Password errata.'; return; }
   err.textContent = '';
+  document.getElementById('loginSceltaFamigliaWrap').style.display = 'none';
   utenteCorrente = { tipo: 'condomino', p: palazzine[palId], f };
   mostraApp();
 }
@@ -1078,6 +1104,7 @@ function logout() {
   document.getElementById('loginNome').value = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginPasswordCond').value = '';
+  document.getElementById('loginSceltaFamigliaWrap').style.display = 'none';
   document.getElementById('loginErrorCond').textContent = '';
   document.getElementById('loginErrorAdmin').textContent = '';
   document.getElementById('loginOverlay').style.display = 'flex';
