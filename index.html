@@ -206,6 +206,9 @@
 
   <!-- TAB: RIEPILOGO -->
   <div class="panel active" id="panel-riepilogo">
+    <div class="toolbar">
+      <button class="btn-outline" onclick="openModal('palazzina')">+ Nuova Palazzina</button>
+    </div>
     <table>
       <thead>
         <tr>
@@ -215,6 +218,7 @@
           <th>Media per Famiglia</th>
           <th>Rate Versate</th>
           <th>Saldo</th>
+          <th>Azioni</th>
         </tr>
       </thead>
       <tbody id="riepilogoBody"></tbody>
@@ -396,6 +400,10 @@ const DATA_KEY = 'condomini_dati_v2';
 let appuntamenti = [];
 const APP_KEY = 'condomini_appuntamenti_v1';
 let prenotazioneInCorso = null;
+let editPalazzinaId = null;
+let editSpesaId = null;
+let editFamPalId = null;
+let editFamId = null;
 
 /* Generatore pseudo-casuale deterministico: stessi dati su ogni dispositivo */
 let rndState = 20260912;
@@ -666,7 +674,7 @@ function renderAll() {
 function renderHeader() {
   const totFam = palazzine.reduce((s, p) => s + p.famiglie.length, 0);
   const totSpesa = spese.reduce((s, sp) => s + sp.importo, 0);
-  document.getElementById('hTotPalazzine').textContent = `10 palazzine`;
+  document.getElementById('hTotPalazzine').textContent = `${palazzine.length} palazzine`;
   document.getElementById('hTotFamiglie').textContent = `${totFam} famiglie`;
   document.getElementById('hTotSpese').textContent = `€ ${totSpesa.toLocaleString('it-IT')}`;
 }
@@ -729,6 +737,10 @@ function renderRiepilogo() {
         <div class="progress-bar"><div class="fill ${pctRate > 80 ? 'fill-green' : pctRate > 50 ? 'fill-yellow' : 'fill-red'}" style="width:${pctRate}%"></div></div>
       </td>
       <td class="amount ${saldo < 0 ? 'negative' : ''}">€ ${saldo.toLocaleString('it-IT')}</td>
+      <td>
+        <button class="btn-outline" style="padding:2px 8px;font-size:.72rem" onclick="modificaPalazzina(${p.id})">Modifica</button>
+        <button class="btn-outline" style="padding:2px 8px;font-size:.72rem" onclick="eliminaPalazzina(${p.id})">Elimina</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -767,6 +779,8 @@ function renderFamiglie() {
           <div class="amount">€ ${totSpeseCorr.toLocaleString('it-IT')}</div>
           <div style="font-size:.72rem;color:var(--text-muted)">${speseCorrelate.length} documenti</div>
           <button class="btn-outline" style="padding:2px 8px;font-size:.72rem" onclick="mostraSpeseFamiglia(${p.id},'${f.id}')">Dettagli</button>
+          <button class="btn-outline" style="padding:2px 8px;font-size:.72rem" onclick="modificaFamiglia(${p.id},'${f.id}')">Modifica</button>
+          <button class="btn-outline" style="padding:2px 8px;font-size:.72rem" onclick="eliminaFamiglia(${p.id},'${f.id}')">Elimina</button>
         </td>
         <td><span class="badge ${badgeClass}">${badgeText}</span></td>
       </tr>`);
@@ -787,18 +801,26 @@ function renderSpese() {
 
   document.getElementById('speseBody').innerHTML = rows.map(s => `<tr>
     <td>${formatDate(s.data)}</td>
-    <td>${palazzine[s.palazzinaId].nome}</td>
+    <td>${nomePalazzina(s.palazzinaId)}</td>
     <td>${s.categoria}</td>
     <td>${s.descrizione}</td>
     <td class="amount">€ ${s.importo.toLocaleString('it-IT')}</td>
     <td class="amount">€ ${s.perFamiglia.toLocaleString('it-IT')}</td>
-    <td><button class="btn-outline" style="padding:2px 8px;font-size:.75rem" onclick="eliminaSpesa(${s.id})">Elimina</button></td>
+    <td>
+      <button class="btn-outline" style="padding:2px 8px;font-size:.75rem" onclick="modificaSpesa(${s.id})">Modifica</button>
+      <button class="btn-outline" style="padding:2px 8px;font-size:.75rem" onclick="eliminaSpesa(${s.id})">Elimina</button>
+    </td>
   </tr>`).join('');
 }
 
 function formatDate(d) {
   const [y, m, day] = d.split('-');
   return `${day}/${m}/${y}`;
+}
+
+function nomePalazzina(id) {
+  const p = palazzine.find(x => x.id === id);
+  return p ? p.nome : '—';
 }
 
 function eliminaSpesa(id) {
@@ -819,6 +841,7 @@ function openModal(type) {
   if (type === 'spesa') {
     let opts = palazzine.map(p => `<option value="${p.id}">${p.nome} (${p.famiglie.length} fam.)</option>`).join('');
     let catOpts = CATEGORIE.map(c => `<option value="${c}">${c}</option>`).join('');
+    editSpesaId = null;
     modal.innerHTML = `
       <h2>Nuova Spesa</h2>
       <div class="form-group"><label>Data</label><input type="date" id="mData" value="${new Date().toISOString().slice(0,10)}"></div>
@@ -830,8 +853,24 @@ function openModal(type) {
         <button class="btn-cancel" onclick="closeModal()">Annulla</button>
         <button class="btn-save" onclick="salvaSpesa()">Salva</button>
       </div>`;
+  } else if (type === 'spesaEdit') {
+    let s = spese.find(x => x.id === editSpesaId);
+    let opts = palazzine.map(p => `<option value="${p.id}" ${p.id === s.palazzinaId ? 'selected' : ''}>${p.nome} (${p.famiglie.length} fam.)</option>`).join('');
+    let catOpts = CATEGORIE.map(c => `<option value="${c}" ${c === s.categoria ? 'selected' : ''}>${c}</option>`).join('');
+    modal.innerHTML = `
+      <h2>Modifica Spesa #${s.id}</h2>
+      <div class="form-group"><label>Data</label><input type="date" id="mData" value="${s.data}"></div>
+      <div class="form-group"><label>Palazzina</label><select id="mPalazzina">${opts}</select></div>
+      <div class="form-group"><label>Categoria</label><select id="mCategoria">${catOpts}</select></div>
+      <div class="form-group"><label>Descrizione</label><input type="text" id="mDescrizione" value="${s.descrizione}"></div>
+      <div class="form-group"><label>Importo (€)</label><input type="number" id="mImporto" min="0" step="0.01" value="${s.importo}"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">Annulla</button>
+        <button class="btn-save" onclick="salvaSpesa()">Salva</button>
+      </div>`;
   } else if (type === 'famiglia') {
     let opts = palazzine.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+    editFamPalId = null; editFamId = null;
     modal.innerHTML = `
       <h2>Nuova Famiglia</h2>
       <div class="form-group"><label>Palazzina</label><select id="mFamPalazzina">${opts}</select></div>
@@ -841,6 +880,41 @@ function openModal(type) {
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeModal()">Annulla</button>
         <button class="btn-save" onclick="salvaFamiglia()">Salva</button>
+      </div>`;
+  } else if (type === 'famigliaEdit') {
+    const p = palazzine.find(x => x.id === editFamPalId);
+    const f = p ? p.famiglie.find(x => x.id === editFamId) : null;
+    if (!p || !f) { editFamPalId = null; editFamId = null; return; }
+    let opts = palazzine.map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${x.nome}</option>`).join('');
+    modal.innerHTML = `
+      <h2>Modifica Famiglia</h2>
+      <div class="form-group"><label>Palazzina</label><select id="mFamPalazzina">${opts}</select></div>
+      <div class="form-group"><label>Interno</label><input type="text" id="mFamInterno" value="${f.interno}"></div>
+      <div class="form-group"><label>Nome Famiglia</label><input type="text" id="mFamNome" value="${f.nome}"></div>
+      <div class="form-group"><label>Quota Mensile (€)</label><input type="number" id="mFamQuota" min="1" step="0.01" value="${f.quotaMensile}"></div>
+      <div class="form-group"><label>Password</label><input type="text" id="mFamPassword" value="${f.password}"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">Annulla</button>
+        <button class="btn-save" onclick="salvaFamiglia()">Salva</button>
+      </div>`;
+  } else if (type === 'palazzina') {
+    editPalazzinaId = null;
+    modal.innerHTML = `
+      <h2>Nuova Palazzina</h2>
+      <div class="form-group"><label>Nome</label><input type="text" id="mPalNome" placeholder="Es. Via Roma 5"></div>
+      <div class="form-group"><label>Numero famiglie da generare</label><input type="number" id="mPalNFamiglie" min="0" max="100" value="20"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">Annulla</button>
+        <button class="btn-save" onclick="salvaPalazzina()">Salva</button>
+      </div>`;
+  } else if (type === 'palazzinaEdit') {
+    const p = palazzine.find(x => x.id === editPalazzinaId);
+    modal.innerHTML = `
+      <h2>Modifica Palazzina</h2>
+      <div class="form-group"><label>Nome</label><input type="text" id="mPalNome" value="${p.nome}"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">Annulla</button>
+        <button class="btn-save" onclick="salvaPalazzina()">Salva</button>
       </div>`;
   }
   document.getElementById('modalOverlay').classList.add('open');
@@ -857,8 +931,21 @@ function salvaSpesa() {
   const desc = document.getElementById('mDescrizione').value || cat;
   const imp = Number(document.getElementById('mImporto').value);
   if (!data || !imp) return alert('Compila tutti i campi');
-  const nFam = palazzine[palId].famiglie.length;
-  spese.push({ id: spese.length, data, palazzinaId: palId, categoria: cat, descrizione: desc, importo: imp, perFamiglia: +(imp / nFam).toFixed(2) });
+  const nFamT = palazzine.find(x => x.id === palId);
+  const nFam = nFamT ? nFamT.famiglie.length : 0;
+  if (editSpesaId !== null) {
+    const s = spese.find(x => x.id === editSpesaId);
+    s.data = data;
+    s.palazzinaId = palId;
+    s.categoria = cat;
+    s.descrizione = desc;
+    s.importo = imp;
+    s.perFamiglia = +(imp / nFam).toFixed(2);
+    editSpesaId = null;
+  } else {
+    const nuovoId = spese.reduce((m, x) => Math.max(m, x.id), -1) + 1;
+    spese.push({ id: nuovoId, data, palazzinaId: palId, categoria: cat, descrizione: desc, importo: imp, perFamiglia: +(imp / nFam).toFixed(2) });
+  }
   closeModal();
   renderAll();
   salvaDati();
@@ -867,9 +954,9 @@ function salvaSpesa() {
 function aggiornaQuota(palId, famId, val) {
   const quota = Number(val);
   if (!quota || quota < 0) { renderFamiglie(); return; }
-  const p = palazzine[palId];
-  const f = p.famiglie.find(x => x.id === famId);
-  if (!f) return;
+  const p = palazzine.find(x => x.id === palId);
+  const f = p ? p.famiglie.find(x => x.id === famId) : null;
+  if (!p || !f) return;
   f.quotaMensile = quota;
   f.spesaAnnua = quota * 12;
   f.versato = f.ratePagate * quota;
@@ -883,27 +970,132 @@ function salvaFamiglia() {
   const nome = document.getElementById('mFamNome').value.trim();
   const quota = Number(document.getElementById('mFamQuota').value);
   if (!interno || !nome || !quota || quota < 0) return alert('Compila tutti i campi (quota maggiore di 0)');
-  const p = palazzine[palId];
-  if (p.famiglie.some(f => f.interno === interno)) return alert('Interno già esistente in questa palazzina');
-  const ratePagate = Math.floor(rnd() * 4);
-  p.famiglie.push({
-    id: `${palId}-${p.famiglie.length}`,
-    interno,
-    nome,
-    quotaMensile: quota,
-    ratePagate,
-    versato: ratePagate * quota,
-    spesaAnnua: quota * 12
-  });
+  const p = palazzine.find(x => x.id === palId);
+  if (!p) return alert('Palazzina non trovata');
+  if (editFamId !== null) {
+    const vecchia = palazzine.find(x => x.id === editFamPalId);
+    if (palId === editFamPalId) {
+      if (p.famiglie.some(f => f.interno === interno && f.id !== editFamId)) return alert('Interno già esistente in questa palazzina');
+      const f = p.famiglie.find(x => x.id === editFamId);
+      f.interno = interno;
+      f.nome = nome;
+      f.quotaMensile = quota;
+      f.spesaAnnua = quota * 12;
+      f.versato = f.ratePagate * quota;
+      const pw = document.getElementById('mFamPassword');
+      if (pw) f.password = pw.value.trim() || f.password;
+    } else {
+      if (p.famiglie.some(f => f.interno === interno)) return alert('Interno già esistente nella nuova palazzina');
+      const f = vecchia.famiglie.find(x => x.id === editFamId);
+      f.interno = interno;
+      f.nome = nome;
+      f.quotaMensile = quota;
+      f.spesaAnnua = quota * 12;
+      f.versato = f.ratePagate * quota;
+      const pw = document.getElementById('mFamPassword');
+      if (pw) f.password = pw.value.trim() || f.password;
+      vecchia.famiglie = vecchia.famiglie.filter(x => x.id !== editFamId);
+      f.id = `${palId}-${p.famiglie.length}`;
+      p.famiglie.push(f);
+    }
+    editFamId = null; editFamPalId = null;
+  } else {
+    if (p.famiglie.some(f => f.interno === interno)) return alert('Interno già esistente in questa palazzina');
+    const ratePagate = Math.floor(rnd() * 4);
+    p.famiglie.push({
+      id: `${palId}-${p.famiglie.length}`,
+      interno,
+      nome,
+      password: String(1000 + Math.floor(rnd() * 9000)),
+      quotaMensile: quota,
+      ratePagate,
+      versato: ratePagate * quota,
+      spesaAnnua: quota * 12
+    });
+  }
   closeModal();
   renderAll();
   salvaDati();
 }
 
+function modificaSpesa(id) {
+  editSpesaId = id;
+  openModal('spesaEdit');
+}
+
+function modificaFamiglia(palId, famId) {
+  editFamPalId = palId;
+  editFamId = famId;
+  openModal('famigliaEdit');
+}
+
+function eliminaFamiglia(palId, famId) {
+  const p = palazzine.find(x => x.id === palId);
+  const f = p ? p.famiglie.find(x => x.id === famId) : null;
+  if (!p || !f) return;
+  if (!confirm(`Eliminare la famiglia "${f.nome}" (interno ${f.interno}) da ${p.nome}?`)) return;
+  p.famiglie = p.famiglie.filter(x => x.id !== famId);
+  const delta = p.famiglie.length;
+  spese = spese.map(s => s.palazzinaId === palId && s.perFamiglia > 0 ? { ...s, perFamiglia: +(s.importo / Math.max(delta, 1)).toFixed(2) } : s);
+  renderAll();
+  salvaDati();
+}
+
+function salvaPalazzina() {
+  const nome = document.getElementById('mPalNome').value.trim();
+  if (!nome) return alert('Inserisci il nome della palazzina');
+  if (editPalazzinaId !== null) {
+    const p = palazzine.find(x => x.id === editPalazzinaId);
+    if (palazzine.some(x => x.id !== editPalazzinaId && x.nome.toLowerCase() === nome.toLowerCase())) return alert('Nome già esistente');
+    p.nome = nome;
+    editPalazzinaId = null;
+  } else {
+    if (palazzine.some(x => x.nome.toLowerCase() === nome.toLowerCase())) return alert('Nome già esistente');
+    const id = palazzine.reduce((m, x) => Math.max(m, x.id), -1) + 1;
+    const famiglie = [];
+    const nGen = Number(document.getElementById('mPalNFamiglie').value) || 0;
+    for (let i = 0; i < nGen; i++) {
+      const ratePagate = Math.floor(rnd() * 12) + 1;
+      const quotaMensile = 80 + Math.floor(rnd() * 180);
+      famiglie.push({
+        id: `${id}-${famiglie.length}`,
+        interno: 'F' + (i + 1),
+        nome: generaNome(),
+        password: String(1000 + Math.floor(rnd() * 9000)),
+        quotaMensile,
+        ratePagate,
+        versato: ratePagate * quotaMensile,
+        spesaAnnua: quotaMensile * 12
+      });
+    }
+    palazzine.push({ id, nome, famiglie, scala: ['A','B','C','D','E'] });
+  }
+  closeModal();
+  renderAll();
+  popolaFiltri();
+  salvaDati();
+}
+
+function modificaPalazzina(id) {
+  editPalazzinaId = id;
+  openModal('palazzinaEdit');
+}
+
+function eliminaPalazzina(id) {
+  const p = palazzine.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`Eliminare la palazzina "${p.nome}" con ${p.famiglie.length} famiglie e le relative spese?`)) return;
+  palazzine = palazzine.filter(x => x.id !== id);
+  spese = spese.filter(s => s.palazzinaId !== id);
+  renderAll();
+  popolaFiltri();
+  salvaDati();
+}
+
 function mostraSpeseFamiglia(palId, famId) {
-  const p = palazzine[palId];
-  const f = p.famiglie.find(x => x.id === famId);
-  if (!f) return;
+  const p = palazzine.find(x => x.id === palId);
+  const f = p ? p.famiglie.find(x => x.id === famId) : null;
+  if (!p || !f) return;
   const correlate = spese.filter(s => s.palazzinaId === palId);
   const tot = correlate.reduce((sum, s) => sum + s.perFamiglia, 0);
   const rows = correlate.length ? correlate.map(s => `<tr>
@@ -1278,7 +1470,7 @@ function generaRisposta(q) {
   if (/(palazzin|edific|stabili|torr)/.test(lq)) {
     const pal = palazzine[0];
     const lista = palazzine.slice(0, 4).map(p => p.nome).join(', ');
-    return 'Ci sono ' + palazzine.length + ' palazzine: ' + lista + (palazzine.length > 4 ? ' e altre.' : '.');
+    return 'Al momento ci sono ' + palazzine.length + ' palazzine: ' + (lista ? lista : 'nessuna') + (palazzine.length > 4 ? ' e altre.' : '.');
   }
   if (/(quota|mensil|canone|rata)/.test(lq)) {
     const medie = [];
@@ -1433,16 +1625,18 @@ function loginTab(tipo) {
 
 function popolaInterni() {
   const palId = Number(document.getElementById('loginPalazzina').value);
-  return palazzine[palId].famiglie;
+  const p = palazzine.find(x => x.id === palId);
+  return p ? p.famiglie : [];
 }
 
 function aggiornaSceltaFamiglia() {
   const wrap = document.getElementById('loginSceltaFamigliaWrap');
   const sel = document.getElementById('loginSceltaFamiglia');
   const palId = Number(document.getElementById('loginPalazzina').value);
+  const p = palazzine.find(x => x.id === palId);
   const nome = document.getElementById('loginNome').value.trim().toLowerCase();
-  if (!nome || !palazzine[palId]) { wrap.style.display = 'none'; return; }
-  const famiglie = palazzine[palId].famiglie.filter(x => x.nome.split(' ').pop().toLowerCase() === nome);
+  if (!nome || !p) { wrap.style.display = 'none'; return; }
+  const famiglie = p.famiglie.filter(x => x.nome.split(' ').pop().toLowerCase() === nome);
   if (famiglie.length > 1) {
     sel.innerHTML = famiglie.map(f => `<option value="${f.id}">Interno ${f.interno} · ${f.nome}</option>`).join('');
     wrap.style.display = 'block';
@@ -1453,12 +1647,14 @@ function aggiornaSceltaFamiglia() {
 
 function accediCondomino() {
   const palId = Number(document.getElementById('loginPalazzina').value);
+  const p = palazzine.find(x => x.id === palId);
   const nome = document.getElementById('loginNome').value.trim().toLowerCase();
   const pw = document.getElementById('loginPasswordCond').value.trim();
   const err = document.getElementById('loginErrorCond');
+  if (!p) { err.textContent = 'Seleziona la tua palazzina.'; return; }
   if (!nome) { err.textContent = 'Inserisci il tuo cognome.'; return; }
   if (!pw) { err.textContent = 'Inserisci la password personale.'; return; }
-  const famiglie = palazzine[palId].famiglie.filter(x => x.nome.split(' ').pop().toLowerCase() === nome);
+  const famiglie = p.famiglie.filter(x => x.nome.split(' ').pop().toLowerCase() === nome);
   if (!famiglie.length) { err.textContent = 'Nessun condomino con questo cognome in questa palazzina.'; return; }
   let f;
   if (famiglie.length > 1) {
@@ -1471,7 +1667,7 @@ function accediCondomino() {
   if (pw !== f.password) { err.textContent = 'Password errata per ' + f.nome + '.'; return; }
   err.textContent = '';
   document.getElementById('loginSceltaFamigliaWrap').style.display = 'none';
-  utenteCorrente = { tipo: 'condomino', p: palazzine[palId], f };
+  utenteCorrente = { tipo: 'condomino', p, f };
   mostraApp();
 }
 
