@@ -203,6 +203,7 @@
       </select>
       <input type="text" id="searchFamiglia" placeholder="Cerca famiglia..." oninput="renderFamiglie()">
       <button class="btn-outline" onclick="openModal('famiglia')">+ Nuova Famiglia</button>
+      <button class="btn-outline" onclick="rigeneraDati()">&#8635; Rigenera dati</button>
       <button class="btn-outline" onclick="scaricaExcelPassword()">&#11015; Scarica Elenco (Excel)</button>
     </div>
     <table>
@@ -308,8 +309,33 @@ const MESE = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov',
 
 let palazzine = [];
 let spese = [];
+const DATA_KEY = 'condomini_dati_v1';
 
 function init() {
+  const salvato = localStorage.getItem(DATA_KEY);
+  if (salvato) {
+    try {
+      const d = JSON.parse(salvato);
+      if (d && d.palazzine && d.spese) {
+        palazzine = d.palazzine;
+        spese = d.spese;
+        popolaFiltri();
+        document.querySelector('.tabs').style.display = 'none';
+        document.getElementById('summaryCards').style.display = 'none';
+        renderAll();
+        return;
+      }
+    } catch (e) { /* dati corrotti: rigenera */ }
+  }
+  generaDati();
+  localStorage.setItem(DATA_KEY, JSON.stringify({ palazzine, spese }));
+  popolaFiltri();
+  document.querySelector('.tabs').style.display = 'none';
+  document.getElementById('summaryCards').style.display = 'none';
+  renderAll();
+}
+
+function generaDati() {
   palazzine = PALAZZINE_NOMI.map((nome, i) => {
     const famiglie = [];
     const scale = ['A','B','C','D','E'];
@@ -354,11 +380,21 @@ function init() {
       }
     }
   }
+}
 
+function salvaDati() {
+  localStorage.setItem(DATA_KEY, JSON.stringify({ palazzine, spese }));
+}
+
+function popolaFiltri() {
   const selP = document.getElementById('filterPalazzina');
   const selS = document.getElementById('filterSpesePalazzina');
   const selCat = document.getElementById('filterCategoria');
   const selLoginP = document.getElementById('loginPalazzina');
+  selP.innerHTML = '<option value="all">Tutte le palazzine</option>';
+  selS.innerHTML = '<option value="all">Tutte le palazzine</option>';
+  selCat.innerHTML = '<option value="all">Tutte le categorie</option>';
+  selLoginP.innerHTML = '';
   palazzine.forEach(p => {
     selP.innerHTML += `<option value="${p.id}">${p.nome}</option>`;
     selS.innerHTML += `<option value="${p.id}">${p.nome}</option>`;
@@ -366,10 +402,6 @@ function init() {
   });
   CATEGORIE.forEach(c => { selCat.innerHTML += `<option value="${c}">${c}</option>`; });
   popolaInterni();
-
-  document.querySelector('.tabs').style.display = 'none';
-  document.getElementById('summaryCards').style.display = 'none';
-  renderAll();
 }
 
 function generaNome() {
@@ -544,6 +576,7 @@ function formatDate(d) {
 function eliminaSpesa(id) {
   spese = spese.filter(s => s.id !== id);
   renderAll();
+  salvaDati();
 }
 
 function showTab(tab) {
@@ -600,6 +633,7 @@ function salvaSpesa() {
   spese.push({ id: spese.length, data, palazzinaId: palId, categoria: cat, descrizione: desc, importo: imp, perFamiglia: +(imp / nFam).toFixed(2) });
   closeModal();
   renderAll();
+  salvaDati();
 }
 
 function aggiornaQuota(palId, famId, val) {
@@ -612,6 +646,7 @@ function aggiornaQuota(palId, famId, val) {
   f.spesaAnnua = quota * 12;
   f.versato = f.ratePagate * quota;
   renderAll();
+  salvaDati();
 }
 
 function salvaFamiglia() {
@@ -634,6 +669,7 @@ function salvaFamiglia() {
   });
   closeModal();
   renderAll();
+  salvaDati();
 }
 
 function mostraSpeseFamiglia(palId, famId) {
@@ -1117,6 +1153,12 @@ function renderCondomino() {
     <td colspan="4">Totale a mio carico</td>
     <td class="amount">${euro(totSpeseCorr)}</td>
   </tr>`);
+}
+
+function rigeneraDati() {
+  if (!confirm('Rigenerare tutte le famiglie e le spese? Le modifiche andranno perse.')) return;
+  localStorage.removeItem(DATA_KEY);
+  location.reload();
 }
 
 function scaricaExcelPassword() {
