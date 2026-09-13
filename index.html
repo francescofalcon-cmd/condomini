@@ -604,7 +604,12 @@ function renderCalendario() {
       elDetail.innerHTML = '<h4>Appuntamenti del ' + formatDate(calGiornoSelezionato) + '</h4>' + sel.map(a => `
         <div class="appunte-card">
           <div class="appunte-head"><strong>&#128197; ${a.ora}</strong><span class="badge badge-${a.stato}">${a.stato}</span></div>
-          <div class="appunte-body"><div>${a.nome} — ${a.palazzina} (interno ${a.interno})</div><div class="muted">Telefono: ${a.telefono || 'non fornito'}</div></div>
+          <div class="appunte-body"><div>${a.nome} — ${a.palazzina} (interno ${a.interno})</div>
+<div class="muted">Telefono: ${a.telefono || 'non fornito'}</div>
+        ${a.motivo ? '<div class="muted">Motivo: ' + a.motivo + '</div>' : ''}
+        ${a.email ? '<div class="muted">Email: ' + a.email + '</div>' : ''}
+            ${a.motivo ? '<div class="muted">Motivo: ' + a.motivo + '</div>' : ''}
+            ${a.email ? '<div class="muted">Email: ' + a.email + '</div>' : ''}</div>
           <div class="appunte-actions">
             ${a.stato === 'richiesto' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'confermato\')">&#10003; Conferma</button>' : ''}
             ${a.stato !== 'completato' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'completato\')">&#9989; Completa</button>' : ''}
@@ -668,7 +673,7 @@ function urlGoogleCalendar(a, durataMinuti) {
   p.set('action', 'TEMPLATE');
   p.set('text', 'Appuntamento telefonico - ' + a.nome + ' (' + a.palazzina + ', interno ' + a.interno + ')');
   p.set('dates', fmt(inizio) + '/' + fmt(fine));
-  p.set('details', 'Appuntamento telefonico richiesto dal condomino ' + a.nome + ' (' + a.palazzina + ', interno ' + a.interno + '). Stato: ' + a.stato + '.');
+  p.set('details', 'Appuntamento telefonico richiesto dal condomino ' + a.nome + ' (' + a.palazzina + ', interno ' + a.interno + '). Stato: ' + a.stato + '.' + (a.motivo ? ' Motivo: ' + a.motivo + '.' : '') + (a.email ? ' Email condomino: ' + a.email + '.' : ''));
   p.set('location', 'Telefonata');
   return 'https://calendar.google.com/calendar/render?' + p.toString();
 }
@@ -1443,41 +1448,72 @@ function rispondiAppuntamento(lq, p, f) {
   const intento = /(appuntamento|prenot|fissa|fissare|calendarizz|chiamata con|parlare con l|vedere l'amm|chiamata telefonica|richiama|contatt|telefonat)/.test(lq);
   const annulla = /(annull|lasci|niente)/.test(lq);
   const conferma = /(va bene|ok|perfetto|sì|si|scelgo|d'accordo|va benissimo|preferisco)/.test(lq);
+  const email = lq.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+
   if (prenotazioneInCorso) {
     if (annulla) { prenotazioneInCorso = null; return 'Va bene, ho annullato. Vuoi sapere altro sulle tue spese?'; }
-    if (conferma && !parsaOra(lq)) {
-      const slot = slotLiberi(1)[0];
-      if (slot) {
-        return prenota(p, f, slot.data, slot.ora) + ' Se preferisci un altro giorno o ora, dimmelo: ad esempio "lunedì alle 10".';
+
+    // FASE 1: scelta dello slot
+    if (prenotazioneInCorso.fase === 'slot') {
+      let slot = null;
+      if (conferma && !parsaOra(lq)) {
+        slot = slotLiberi(1)[0];
+        if (slot) {
+          prenotazioneInCorso.data = slot.data;
+          prenotazioneInCorso.ora = slot.ora;
+          prenotazioneInCorso.fase = 'motivo';
+          return 'Perfetto, ho fissato per ' + descriviSlot(slot) + '. Qual è il motivo dell\'appuntamento?';
+        }
       }
+      const ora = parsaOra(lq);
+      if (ora) {
+        const data = parsaData(lq);
+        prenotazioneInCorso.data = data;
+        prenotazioneInCorso.ora = ora;
+        prenotazioneInCorso.fase = 'motivo';
+        return 'Perfetto, ho fissato per ' + formatDate(data) + ' alle ' + ora + '. Qual è il motivo dell\'appuntamento?';
+      }
+      const liberi = slotLiberi(5);
+      return 'Non ho capito il giorno. Ti mostro i prossimi slot liberi: ' + liberi.map(descriviSlot).join('; ') + '. Dimmi quale preferisci, oppure un giorno e un\'ora, ad esempio "lunedì alle 10".';
     }
-    const ora = parsaOra(lq);
-    if (ora) {
-      const data = parsaData(lq);
-      return prenota(p, f, data, ora) + '';
+
+    // FASE 2: motivo dell'appuntamento
+    if (prenotazioneInCorso.fase === 'motivo') {
+      prenotazioneInCorso.motivo = lq;
+      prenotazioneInCorso.fase = 'email';
+      return 'Grazie, ho annotato il motivo: "' + lq + '". Ora dimmi la tua email così ti invierò il calendario dell\'appuntamento.';
     }
-    const liberi = slotLiberi(5);
-    return 'Non ho capito il giorno. Ti mostro i prossimi slot liberi: ' + liberi.map(descriviSlot).join('; ') + '. Dimmi quale preferisci, oppure un giorno e un\'ora, ad esempio "lunedì alle 10".';
+
+    // FASE 3: email per il calendario
+    if (prenotazioneInCorso.fase === 'email') {
+      if (!email) return 'Non ho riconosciuto un indirizzo email. Ri scrivilo, ad esempio: esempio@email.it';
+      prenotazioneInCorso.email = email[0];
+      return completaPrenotazione(prenotazioneInCorso);
+    }
   }
+
   if (!intento) return null;
   const ora = parsaOra(lq);
   if (ora) {
     const data = parsaData(lq);
-    return prenota(p, f, data, ora);
+    prenotazioneInCorso = { p, f, data, ora, fase: 'motivo' };
+    return 'Perfetto, ho fissato per ' + formatDate(data) + ' alle ' + ora + '. Qual è il motivo dell\'appuntamento?';
   }
   const liberi = slotLiberi(5);
-  prenotazioneInCorso = { p, f };
+  prenotazioneInCorso = { p, f, fase: 'slot' };
   return 'Volentieri! Questi sono i prossimi slot liberi: ' + liberi.map(descriviSlot).join('; ') + '. Dimmi quale preferisci, oppure un giorno e un\'ora, ad esempio "lunedì alle 10".';
 }
 
-function prenota(p, f, data, ora) {
+function completaPrenotazione(pr) {
   appuntamenti.push({
     id: Date.now(),
-    data,
-    ora,
-    nome: f.nome,
-    palazzina: p.nome,
-    interno: f.interno,
+    data: pr.data,
+    ora: pr.ora,
+    nome: pr.f.nome,
+    palazzina: pr.p.nome,
+    interno: pr.f.interno,
+    motivo: pr.motivo || '',
+    email: pr.email || '',
     telefono: '',
     stato: 'richiesto',
     creato: new Date().toISOString()
@@ -1485,7 +1521,7 @@ function prenota(p, f, data, ora) {
   salvaAppuntamenti();
   prenotazioneInCorso = null;
   renderAppuntamenti();
-  return 'Perfetto ' + f.nome.split(' ')[0] + '! Ho prenotato il tuo appuntamento telefonico per il ' + formatDate(data) + ' alle ' + ora + '. L\'amministratore ti richiamerà. Vuoi sapere altro?';
+  return 'Perfetto ' + pr.f.nome.split(' ')[0] + '! Ho prenotato il tuo appuntamento telefonico per il ' + formatDate(pr.data) + ' alle ' + pr.ora + '. Motivo: "' + pr.motivo + '". Ti invierò il calendario all\'email ' + pr.email + '. L\'amministratore ti richiamerà. Vuoi sapere altro?';
 }
 
 function parsaOra(txt) {
