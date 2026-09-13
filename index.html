@@ -77,6 +77,15 @@
   .appunte-body { margin-top: .4rem; }
   .appunte-actions { margin-top: .6rem; display: flex; gap: .4rem; flex-wrap: wrap; }
   .appunte-foot { margin-top: .5rem; font-size: .72rem; color: var(--text-muted); }
+  .appunte-report { background: #f8f9fa; border-radius: 6px; padding: .7rem .8rem; margin-top: .6rem; font-size: .78rem; }
+  .appunte-report .report-title { font-weight: 600; font-size: .8rem; margin-bottom: .35rem; }
+  .appunte-report .report-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
+  .appunte-report .report-chips span:not(.badge) { background: #e9ecef; padding: .2rem .5rem; border-radius: 5px; font-size: .73rem; }
+  .appunte-report .report-table { width: 100%; border-collapse: collapse; }
+  .appunte-report .report-table th { text-align: left; font-size: .7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; padding: .3rem .4rem; border-bottom: 1px solid var(--border); }
+  .appunte-report .report-table td { padding: .25rem .4rem; border-bottom: 1px solid var(--border); font-size: .73rem; }
+  .appunte-report .report-tot { margin-top: .4rem; font-weight: 600; font-size: .76rem; }
+  .appunte-report-wrap > summary { cursor: pointer; font-size: .75rem; color: var(--primary); margin-top: .5rem; }
   .empty { color: var(--text-muted); padding: 1rem 0; }
   .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
   .amount.negative { color: var(--red); }
@@ -682,8 +691,7 @@ function renderCalendario() {
 <div class="muted">Telefono: ${a.telefono || 'non fornito'}</div>
         ${a.motivo ? '<div class="muted">Motivo: ' + a.motivo + '</div>' : ''}
         ${a.email ? '<div class="muted">Email: ' + a.email + '</div>' : ''}
-            ${a.motivo ? '<div class="muted">Motivo: ' + a.motivo + '</div>' : ''}
-            ${a.email ? '<div class="muted">Email: ' + a.email + '</div>' : ''}</div>
+            ${reportSpeseRichiedente(a)}</div>
           <div class="appunte-actions">
             ${a.stato === 'richiesto' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'confermato\')">&#10003; Conferma</button>' : ''}
             ${a.stato !== 'completato' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'completato\')">&#9989; Completa</button>' : ''}
@@ -716,6 +724,9 @@ function renderAppuntamenti() {
       <div class="appunte-body">
         <div>${a.nome} — ${a.palazzina} (interno ${a.interno})</div>
         <div class="muted">Telefono: ${a.telefono || 'non fornito'}</div>
+        ${a.motivo ? '<div class="muted">Motivo: ' + a.motivo + '</div>' : ''}
+        ${a.email ? '<div class="muted">Email: ' + a.email + '</div>' : ''}
+        <details class="appunte-report-wrap"><summary>Report spese del richiedente</summary>${reportSpeseRichiedente(a)}</details>
       </div>
       <div class="appunte-actions">
         ${a.stato === 'richiesto' ? '<button class="btn-outline" onclick="completaAppuntamento(' + a.id + ', \'confermato\')">&#10003; Conferma</button>' : ''}
@@ -736,6 +747,26 @@ function eliminaAppuntamento(id) {
   appuntamenti = appuntamenti.filter(x => x.id !== id);
   salvaAppuntamenti();
   renderAppuntamenti();
+}
+
+function reportSpeseRichiedente(a) {
+  const p = palazzine.find(x => x.nome === a.palazzina);
+  const f = p ? p.famiglie.find(x => x.interno === a.interno || x.nome === a.nome) : null;
+  if (!p || !f) return '<div class="appunte-report"><div class="muted">Famiglia non trovata nei dati correnti.</div></div>';
+  const correlate = spese.filter(s => s.palazzinaId === p.id);
+  const tot = correlate.reduce((sum, s) => sum + s.perFamiglia, 0);
+  const residuo = f.spesaAnnua - f.versato;
+  const st = statoCondomino(f);
+  const badgeClass = st === 'aggiornato' ? 'badge-ok' : st === 'in_attesa' ? 'badge-pending' : 'badge-overdue';
+  const badgeText = st === 'aggiornato' ? 'Aggiornato' : st === 'in_attesa' ? 'In attesa' : 'In ritardo';
+  const speseVis = correlate.slice(0, 8);
+  const rows = speseVis.length ? speseVis.map(s => `<tr><td>${formatDate(s.data)}</td><td>${s.categoria}</td><td>${s.descrizione}</td><td class="amount">€ ${s.perFamiglia.toLocaleString('it-IT')}</td></tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:.5rem">Nessuna spesa correlata a questo edificio</td></tr>';
+  const extra = correlate.length > 8 ? `<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">… altre ${correlate.length - 8} spese</td></tr>` : '';
+  return '<div class="appunte-report">' +
+    '<div class="report-title">Report spese — ' + f.nome + ' (' + p.nome + ', int. ' + f.interno + ')</div>' +
+    '<div class="report-chips"><span>Quota mese ' + euro(f.quotaMensile) + '</span><span>Spesa annua ' + euro(f.spesaAnnua) + '</span><span>Versato ' + euro(f.versato) + ' (' + f.ratePagate + '/12)</span><span>Residuo ' + euro(residuo) + '</span><span class="badge ' + badgeClass + '">' + badgeText + '</span></div>' +
+    '<table class="report-table"><thead><tr><th>Data</th><th>Categoria</th><th>Descrizione</th><th>Per famiglia</th></tr></thead><tbody>' + rows + extra + '</tbody></table>' +
+    '<div class="report-tot">Totale a carico: € ' + tot.toLocaleString('it-IT') + '</div></div>';
 }
 
 function urlGoogleCalendar(a, durataMinuti) {
