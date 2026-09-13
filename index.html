@@ -1523,24 +1523,29 @@ function rispondiRegolamento(lq) {
 }
 
 function trovaCondomini(lq) {
-  const trovati = [];
   const parole = normalizza(lq);
-  const ambigue = ['costa','conti','gallo','bruno','bianchi','greco','marino','fontana','rossi','ricci','roma','sara','luca'];
+  const ambigue = ['costa','conti','gallo','bruno','bianchi','greco','marino','fontana','rossi','ricci','roma','sara','luca','anna','laura','simone'];
   const contesto = ['famiglia','signor','signora','condomin','pagat','deve','abita','residuo','quota','nome','situazione','versato','intern','cognom','parli','chiama','chi'];
   const haContesto = parole.some(w => contesto.some(c => w.includes(c) || c.includes(w)));
+  const corrisponde = (t, w) => t === w || (w.length > 3 && t.length > 3 && (t.startsWith(w) || w.startsWith(t)));
+  const risultati = [];
   for (const p of palazzine) {
     for (const f of p.famiglie) {
       const tok = normalizza(f.nome);
-      const match = parole.some(w =>
-        tok.some(t => t === w || (w.length > 3 && (t.startsWith(w) || w.startsWith(t))))
-      );
-      if (!match) continue;
-      const parolaTrovata = parole.find(w => tok.some(t => t === w || (w.length > 3 && (t.startsWith(w) || w.startsWith(t)))));
-      if (ambigue.includes(parolaTrovata) && !haContesto) continue;
-      trovati.push({ p, f });
+      const matchTok = tok.filter(t => parole.some(w => corrisponde(t, w)));
+      if (!matchTok.length) continue;
+      const completo = matchTok.length >= tok.length;
+      if (!completo) {
+        const wUsata = parole.find(w => matchTok.some(t => corrisponde(t, w)));
+        if (ambigue.includes(wUsata) && !haContesto) continue;
+      }
+      risultati.push({ p, f, matchTok: matchTok.length, completo });
     }
   }
-  return trovati;
+  const completi = risultati.filter(r => r.completo);
+  const gruppo = completi.length ? completi : risultati;
+  const maxTok = Math.max(...gruppo.map(r => r.matchTok), 0);
+  return gruppo.filter(r => r.matchTok === maxTok).map(r => ({ p: r.p, f: r.f }));
 }
 
 function statoCondomino(f) {
