@@ -1056,6 +1056,7 @@ function graficoAnello(elemento, dati) {
 }
 
 function renderGrafici() {
+  if (!(utenteCorrente && utenteCorrente.tipo === 'admin')) return;
   const grid = document.getElementById('graficiGrid');
   if (!grid) return;
 
@@ -1127,7 +1128,10 @@ function showTab(tab) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('panel-' + tab).classList.add('active');
-  if (tab === 'grafici') renderGrafici();
+  if (tab === 'grafici') {
+    if (!(utenteCorrente && utenteCorrente.tipo === 'admin')) { alert('Accesso riservato all\'amministratore.'); return; }
+    renderGrafici();
+  }
 }
 
 function openModal(type) {
